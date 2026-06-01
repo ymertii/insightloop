@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarDays, Download, Printer, Share2 } from 'lucide-react';
+import { Download, Printer, Share2 } from 'lucide-react';
 import {
   Cell,
   Line,
@@ -250,10 +250,6 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
             <Printer className="h-4 w-4" />
           </button>
         </div>
-        <button className="inline-flex items-center rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-sm">
-          <CalendarDays className="mr-2 h-4 w-4" />
-          Schedule Review
-        </button>
       </div>
 
       <header className="mb-5">
@@ -292,7 +288,7 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="report-body-grid grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-5">
           <Section title="General Situation Summary">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -408,7 +404,7 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
           </Section>
 
           <Section title="HappiWork - Recommended Intervention Plan">
-            <div className="grid grid-cols-1 gap-5 text-sm md:grid-cols-3">
+            <div className="intervention-plan-grid grid grid-cols-1 gap-5 text-sm md:grid-cols-3">
               <div>
                 <h4 className="font-black text-blue-700">Short-Term (0-2 weeks)</h4>
                 <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-relaxed text-slate-600">

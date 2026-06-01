@@ -147,13 +147,21 @@ export default function Reports() {
   };
 
   const handlePrintReport = React.useCallback(() => {
-    window.setTimeout(() => window.print(), 350);
+    const cleanupPrintState = () => document.body.classList.remove('printing-report');
+
+    document.body.classList.add('printing-report');
+    window.addEventListener('afterprint', cleanupPrintState, { once: true });
+
+    window.setTimeout(() => {
+      window.print();
+      window.setTimeout(cleanupPrintState, 1000);
+    }, 250);
   }, []);
 
   const handleDownload = (report: Report) => {
     setSelectedReport(report);
     setIsViewModalOpen(true);
-    window.setTimeout(() => window.print(), 650);
+    window.setTimeout(handlePrintReport, 650);
   };
 
   const allReports = React.useMemo<Report[]>(() => {
@@ -385,9 +393,9 @@ export default function Reports() {
 
       {/* View Report Modal */}
       {isViewModalOpen && selectedReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <Card className="w-full max-w-6xl mx-4 shadow-xl h-[88vh] flex flex-col">
-            <CardHeader className="flex flex-row justify-between items-start pb-4 border-b border-border shrink-0">
+        <div className="print-report-modal fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <Card className="print-report-shell w-full max-w-6xl mx-4 shadow-xl h-[88vh] flex flex-col">
+            <CardHeader className="print-report-header flex flex-row justify-between items-start pb-4 border-b border-border shrink-0">
               <div>
                 <div className="flex items-center space-x-2 mb-1">
                   <Badge variant="outline">{selectedReport.type}</Badge>
@@ -405,7 +413,7 @@ export default function Reports() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="overflow-y-auto w-full bg-[#f4f6f9] p-0">
+            <CardContent className="print-report-content overflow-y-auto w-full bg-[#f4f6f9] p-0">
               <InsightReportDocument departments={departments} onPrint={handlePrintReport} report={selectedReport} />
             </CardContent>
           </Card>
