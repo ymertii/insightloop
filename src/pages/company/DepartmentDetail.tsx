@@ -72,7 +72,7 @@ export default function DepartmentDetail() {
     setIsGeneratingReport(true);
 
     try {
-      await addReport({
+      const savedReport = await addReport({
         id: `DEPT-${Date.now()}`,
         title: `${dept.name} Diagnostic`,
         type: 'Department Diagnostic',
@@ -80,9 +80,21 @@ export default function DepartmentDetail() {
         date: new Date().toISOString().split('T')[0],
         author: 'AI Narrative Engine',
         status: 'Published',
+        content: JSON.stringify({
+          generatedAt: new Date().toISOString(),
+          metrics: {
+            burnoutScore: dept.burnoutScore,
+            employeeCount: dept.employeeCount,
+            fairness: dept.fairness,
+            resourceIndex: dept.resourceIndex,
+            riskLevel: dept.riskLevel,
+            stressScore: dept.stressScore,
+          },
+          recommendedActions: recommendations.slice(0, 3).map((recommendation) => recommendation.title),
+        }),
         category: 'Department'
       });
-      navigate('/company/reports');
+      navigate('/company/reports', { state: { openReportId: savedReport.id } });
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Unable to generate department report.');
     } finally {

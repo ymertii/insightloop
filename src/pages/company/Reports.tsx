@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { InsightReportDocument } from '../../components/reports/InsightReportDocument';
 import { useStore } from '../../store/useStore';
 import { FileText, Download, Eye, Search, X, Loader2, Sparkles, Building2, Users, ClipboardList, AlertTriangle } from 'lucide-react';
 import { getCompletedTests, getDepartments, getReports } from '../../lib/api';
-import type { CompletedTest, Department, Report } from '../../types/domain';
+import type { CompletedTest, Department, Report, ReportCategory } from '../../types/domain';
 
 const completedTestToInventoryReport = (test: CompletedTest): Report => ({
   id: `INV-${test.id}`,
@@ -18,8 +20,36 @@ const completedTestToInventoryReport = (test: CompletedTest): Report => ({
   category: 'Inventory',
 });
 
+const buildGeneratedReportContent = (reportFocus: string, departments: Department[]) => {
+  const selectedDepartment = reportFocus.startsWith('dept-')
+    ? departments.find((department) => department.id === reportFocus.replace('dept-', ''))
+    : undefined;
+
+  return JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    metrics: selectedDepartment
+      ? {
+          burnoutScore: selectedDepartment.burnoutScore,
+          employeeCount: selectedDepartment.employeeCount,
+          fairness: selectedDepartment.fairness,
+          resourceIndex: selectedDepartment.resourceIndex,
+          riskLevel: selectedDepartment.riskLevel,
+          stressScore: selectedDepartment.stressScore,
+        }
+      : {
+          averageBurnout: departments.reduce((sum, department) => sum + department.burnoutScore, 0) / Math.max(departments.length, 1),
+          averageStress: departments.reduce((sum, department) => sum + department.stressScore, 0) / Math.max(departments.length, 1),
+          criticalDepartments: departments.filter((department) => department.riskLevel === 'Critical').length,
+          totalEmployees: departments.reduce((sum, department) => sum + department.employeeCount, 0),
+        },
+    reportFocus,
+  });
+};
+
 export default function Reports() {
   const { generatedReports, addReport } = useStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [completedInventoryReports, setCompletedInventoryReports] = useState<Report[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -31,6 +61,7 @@ export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [reportFocus, setReportFocus] = useState('org-full');
+  const openedReportIdRef = React.useRef<string | null>(null);
 
   const loadReportsData = React.useCallback(async () => {
     setIsLoading(true);
@@ -61,7 +92,7 @@ export default function Reports() {
     let title = 'Organization-Wide Summary';
     let scope = 'Company';
     let type = 'Executive Summary';
-    let category: 'Organization' | 'Department' | 'Inventory' = 'Organization';
+    let category: ReportCategory = 'Organization';
     
     if (reportFocus.startsWith('dept-')) {
       const deptId = reportFocus.replace('dept-', '');
@@ -77,7 +108,7 @@ export default function Reports() {
     }
 
     try {
-      await addReport({
+      const savedReport = await addReport({
         id: `REP-${Date.now()}`,
         title,
         type,
@@ -85,9 +116,13 @@ export default function Reports() {
         date: new Date().toISOString().split('T')[0],
         author: 'AI Narrative Engine',
         status: 'Published',
+        content: buildGeneratedReportContent(reportFocus, departments),
         category
       });
+      setActiveTab(category === 'Department' ? 'department' : category === 'Inventory' ? 'inventory' : 'organization');
       setIsGenerateModalOpen(false);
+      setSelectedReport(savedReport);
+      setIsViewModalOpen(true);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Unable to generate report.');
     } finally {
@@ -98,6 +133,16 @@ export default function Reports() {
   const handleView = (report: any) => {
     setSelectedReport(report);
     setIsViewModalOpen(true);
+  };
+
+  const handlePrintReport = React.useCallback(() => {
+    window.setTimeout(() => window.print(), 350);
+  }, []);
+
+  const handleDownload = (report: Report) => {
+    setSelectedReport(report);
+    setIsViewModalOpen(true);
+    window.setTimeout(() => window.print(), 650);
   };
 
   const allReports = React.useMemo<Report[]>(() => {
@@ -118,6 +163,20 @@ export default function Reports() {
     activeTab === 'organization' ? orgReports :
     activeTab === 'department' ? deptReports :
     inventoryReports;
+
+  React.useEffect(() => {
+    const openReportId = (location.state as { openReportId?: string } | null)?.openReportId;
+    if (!openReportId || openedReportIdRef.current === openReportId || allReports.length === 0) return;
+
+    const reportToOpen = allReports.find((report) => report.id === openReportId);
+    if (!reportToOpen) return;
+
+    openedReportIdRef.current = openReportId;
+    setActiveTab(reportToOpen.category === 'Department' ? 'department' : reportToOpen.category === 'Inventory' ? 'inventory' : 'organization');
+    setSelectedReport(reportToOpen);
+    setIsViewModalOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [allReports, location.pathname, location.state, navigate]);
 
   return (
     <div className="space-y-6">
@@ -237,7 +296,7 @@ export default function Reports() {
                   <Button variant="outline" className="flex-1" onClick={() => handleView(report)}>
                     <Eye className="w-4 h-4 mr-2" /> View
                   </Button>
-                  <Button variant="secondary" size="icon" onClick={() => alert(`Downloading ${report.title}...`)}>
+                  <Button variant="secondary" size="icon" onClick={() => handleDownload(report)} aria-label={`Download ${report.title} as PDF`}>
                     <Download className="w-4 h-4" />
                   </Button>
                 </div>
@@ -315,7 +374,7 @@ export default function Reports() {
       {/* View Report Modal */}
       {isViewModalOpen && selectedReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <Card className="w-full max-w-4xl mx-4 shadow-xl h-[85vh] flex flex-col">
+          <Card className="w-full max-w-6xl mx-4 shadow-xl h-[88vh] flex flex-col">
             <CardHeader className="flex flex-row justify-between items-start pb-4 border-b border-border shrink-0">
               <div>
                 <div className="flex items-center space-x-2 mb-1">
@@ -326,7 +385,7 @@ export default function Reports() {
                 <CardDescription>Scope: {selectedReport.scope}</CardDescription>
               </div>
               <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm" onClick={() => alert(`Downloading PDF...`)}>
+                <Button variant="outline" size="sm" onClick={handlePrintReport}>
                   <Download className="w-4 h-4 mr-2" /> PDF
                 </Button>
                 <Button variant="ghost" size="icon" onClick={() => setIsViewModalOpen(false)}>
@@ -334,38 +393,8 @@ export default function Reports() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="pt-6 overflow-y-auto w-full">
-              <div className="max-w-3xl mx-auto space-y-6 text-sm">
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <h3 className="text-lg font-bold border-b pb-2">Executive Summary</h3>
-                  <p>
-                    This report details the findings from the most recent psychometric assessment targeting {selectedReport.scope}. 
-                    Overall participation was robust, yielding highly reliable data for strategic HR decision-making.
-                  </p>
-                  
-                  <h4 className="text-md font-semibold mt-4">Key Findings</h4>
-                  <ul>
-                    <li><strong>Elevated Systemic Stress:</strong> A 14% increase in reported systemic stress compared to the previous assessment.</li>
-                    <li><strong>Managerial Buffer:</strong> Units with managers rated highly in 'Supportive Communication' showed a 30% reduction in burnout risk.</li>
-                    <li><strong>Resource Deficits:</strong> The primary driver of dissatisfaction is related to perceived inadequacies in operational resources.</li>
-                  </ul>
-                  
-                  <h4 className="text-md font-semibold mt-4">AI Diagnostic Insights</h4>
-                  <p>
-                    The AI engine identified a strong correlation between 'Time-to-Resolve' metrics in IT support and feelings of 'Professional Inefficacy' among mid-level management. 
-                    This suggests that operational bottlenecks are directly translating into psychological strain.
-                  </p>
-                  
-                  <div className="bg-secondary/30 p-4 rounded-lg mt-4 border border-border">
-                    <h5 className="font-semibold text-primary mb-2">Recommended Immediate Actions:</h5>
-                    <ol className="list-decimal pl-4 space-y-1">
-                      <li>Deploy standard 'Resilience and Coping' micro-training to all high-risk cohorts.</li>
-                      <li>Initiate a targeted operational review in the relevant departments to address resource provisioning.</li>
-                      <li>Review flexible work arrangements, as current data suggests rigid scheduling is compounding emotional exhaustion.</li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
+            <CardContent className="overflow-y-auto w-full bg-[#f4f6f9] p-0">
+              <InsightReportDocument departments={departments} onPrint={handlePrintReport} report={selectedReport} />
             </CardContent>
           </Card>
         </div>

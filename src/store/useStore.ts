@@ -35,7 +35,7 @@ interface AppState {
   setCurrentTenant: (tenant: string) => void;
 
   generatedReports: Report[];
-  addReport: (report: Report) => Promise<void>;
+  addReport: (report: Report) => Promise<Report>;
 
   libraryResources: LibraryResource[];
   addResource: (resource: Omit<LibraryResource, 'id'>) => Promise<void>;
@@ -80,6 +80,7 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({
       generatedReports: [savedReport, ...state.generatedReports.filter((item) => item.id !== savedReport.id)]
     }));
+    return savedReport;
   },
 
   libraryResources: fallbackLibraryResources,
