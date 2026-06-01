@@ -4,19 +4,32 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Progress } from '../../components/ui/Progress';
 import { ClipboardList, Plus, PlayCircle, CheckCircle2, Bell, Eye, X, Check, BrainCircuit, Calendar as CalendarIcon, FileText, Download } from 'lucide-react';
-import { fallbackActiveInventories, fallbackCompletedTests, fallbackDepartments } from '../../data/fallbackData';
+import { fallbackActiveInventories, fallbackCompletedTests, fallbackDepartments, fallbackInventoryTemplates } from '../../data/fallbackData';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { getActiveInventories, getCompletedTests, getDepartments } from '../../lib/api';
+import { getActiveInventories, getCompletedTests, getDepartmentResponseRates, getDepartments, getInventoryTemplates } from '../../lib/api';
+import type { ActiveInventory } from '../../types/domain';
 
 export default function Tests() {
   const { data: departments } = useAsyncData(getDepartments, fallbackDepartments, []);
   const { data: activeInventories, isLoading, error } = useAsyncData(getActiveInventories, fallbackActiveInventories, []);
   const { data: completedTests } = useAsyncData(getCompletedTests, fallbackCompletedTests, []);
+  const { data: inventoryTemplates } = useAsyncData(getInventoryTemplates, fallbackInventoryTemplates, []);
+  const { data: departmentResponseRates } = useAsyncData(getDepartmentResponseRates, [], []);
   const [isNewInventoryModalOpen, setIsNewInventoryModalOpen] = useState(false);
   const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [selectedCompletedTest, setSelectedCompletedTest] = useState<any>(null);
+  const [selectedActiveInventory, setSelectedActiveInventory] = useState<ActiveInventory | null>(null);
   const [remindersSent, setRemindersSent] = useState(false);
+  const recommendedTemplate = inventoryTemplates.find((template) => template.title.toLowerCase().includes('burnout')) ?? inventoryTemplates[0];
+  const highestRiskDepartments = departments
+    .filter((department: any) => ['Critical', 'High'].includes(department.riskLevel))
+    .slice(0, 2)
+    .map((department: any) => department.name);
+  const riskDepartmentLabel = highestRiskDepartments.length ? highestRiskDepartments.join(' and ') : 'the highest-risk departments';
+  const activeInventoryContext = selectedActiveInventory ?? activeInventories[0];
+  const pendingReminderCount = activeInventoryContext?.reminderPendingCount
+    ?? Math.max(0, Number(activeInventoryContext?.invitedCount ?? 0) - Number(activeInventoryContext?.responseCount ?? 0));
 
   const handleSendReminders = () => {
     setRemindersSent(true);
@@ -69,8 +82,8 @@ export default function Tests() {
                   </div>
 
                   <div className="flex space-x-3">
-                    <Button variant="secondary" size="sm" onClick={() => setIsReminderModalOpen(true)}><Bell className="w-4 h-4 mr-2" /> Send Reminders</Button>
-                    <Button variant="outline" size="sm" onClick={() => setIsPreviewModalOpen(true)}><Eye className="w-4 h-4 mr-2" /> Preview Data</Button>
+                    <Button variant="secondary" size="sm" onClick={() => { setSelectedActiveInventory(inventory); setIsReminderModalOpen(true); }}><Bell className="w-4 h-4 mr-2" /> Send Reminders</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setSelectedActiveInventory(inventory); setIsPreviewModalOpen(true); }}><Eye className="w-4 h-4 mr-2" /> Preview Data</Button>
                   </div>
                 </div>
               ))}
@@ -125,9 +138,9 @@ export default function Tests() {
               <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg flex gap-4">
                 <BrainCircuit className="w-6 h-6 text-primary shrink-0 mt-1" />
                 <div>
-                  <h4 className="font-semibold text-primary mb-1">AI Recommended Inventory: Maslach Burnout Inventory (MBI)</h4>
+                  <h4 className="font-semibold text-primary mb-1">AI Recommended Inventory: {recommendedTemplate?.title ?? 'Recommended Assessment'}</h4>
                   <p className="text-sm text-foreground mb-2">
-                    <strong>Why:</strong> Current data indicates an upward trend in emotional exhaustion within Engineering and Sales. The MBI is specifically designed to measure these targeted burnout dimensions, which are currently showing high risk.
+                    <strong>Why:</strong> Current data indicates elevated risk signals in {riskDepartmentLabel}. {recommendedTemplate?.title ?? 'This assessment'} measures the dimensions most aligned with those department trends.
                   </p>
                   <Button size="sm" variant="outline" className="text-xs bg-background/50">Apply AI Recommendation</Button>
                 </div>
@@ -146,10 +159,9 @@ export default function Tests() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Inventory Template</label>
                   <select className="w-full border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option>Maslach Burnout Inventory (MBI)</option>
-                    <option>Perceived Stress Scale (PSS)</option>
-                    <option>JD-R Core Assessment</option>
-                    <option>Comprehensive Pulse (All Modules)</option>
+                    {inventoryTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>{template.title}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -260,7 +272,7 @@ export default function Tests() {
               </div>
 
               <div className="flex justify-end pt-4 border-t border-border">
-                <Button variant="outline" onClick={() => alert('Downloading full PDF report...')}>
+                <Button variant="outline" onClick={() => window.print()}>
                   <Download className="w-4 h-4 mr-2" />
                   Download Full Report
                 </Button>
@@ -285,7 +297,7 @@ export default function Tests() {
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
               <div className="p-3 bg-secondary/50 rounded-lg text-sm mb-4">
-                <span className="font-medium">5,888 employees</span> have not completed the assessment yet.
+                <span className="font-medium">{pendingReminderCount.toLocaleString()} employees</span> have not completed the assessment yet.
               </div>
               <div className="space-y-2">
                 <label className="flex items-center space-x-2 cursor-pointer">
@@ -322,31 +334,26 @@ export default function Tests() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="p-4 border border-border rounded-lg bg-secondary/20">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-1">Responses</h4>
-                  <p className="text-2xl font-bold">12,512</p>
+                  <p className="text-2xl font-bold">{(activeInventoryContext?.responseCount ?? 0).toLocaleString()}</p>
                 </div>
                 <div className="p-4 border border-border rounded-lg bg-secondary/20">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-1">Average Time</h4>
-                  <p className="text-2xl font-bold">8m 42s</p>
+                  <p className="text-2xl font-bold">{activeInventoryContext?.averageTimeLabel ?? 'N/A'}</p>
                 </div>
                 <div className="p-4 border border-border rounded-lg bg-secondary/20">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-1">Abandonment</h4>
-                  <p className="text-2xl font-bold text-amber-500">2.1%</p>
+                  <p className="text-2xl font-bold text-amber-500">{activeInventoryContext?.abandonmentRate ?? 0}%</p>
                 </div>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-3">Live Department Response Rates</h4>
                 <div className="space-y-3">
-                  {[
-                    { dept: 'DevOps', rate: 75 },
-                    { dept: 'Sales', rate: 42 },
-                    { dept: 'Engineering', rate: 88 },
-                    { dept: 'Marketing', rate: 61 }
-                  ].map(stat => (
-                    <div key={stat.dept} className="flex items-center justify-between text-sm">
-                      <span className="w-24 font-medium">{stat.dept}</span>
+                  {departmentResponseRates.map(stat => (
+                    <div key={stat.department} className="flex items-center justify-between text-sm">
+                      <span className="w-24 font-medium truncate">{stat.department}</span>
                       <Progress value={stat.rate} className="flex-1 mx-4 h-2" />
-                      <span className="w-8 text-right text-muted-foreground">{stat.rate}%</span>
+                      <span className="w-12 text-right text-muted-foreground">{Math.round(stat.rate)}%</span>
                     </div>
                   ))}
                 </div>
@@ -354,7 +361,7 @@ export default function Tests() {
 
               <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
                 <h4 className="text-sm font-semibold text-primary mb-1">AI Early Insight</h4>
-                <p className="text-sm text-foreground">Early data suggests a significant variance in workload perception between Engineering and Sales. Final insights will be generated upon completion.</p>
+                <p className="text-sm text-foreground">{activeInventoryContext?.earlyInsight ?? 'Final insights will be generated once enough responses are collected.'}</p>
               </div>
 
             </CardContent>

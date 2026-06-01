@@ -4,12 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../..
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Download, Filter, AlertCircle, X, Save, Plus, Users, Loader2 } from 'lucide-react';
-import { createDepartment, createEmployee, getDepartments } from '../../lib/api';
-import type { Department } from '../../types/domain';
+import { createDepartment, createEmployee, getActionPlans, getDepartments } from '../../lib/api';
+import type { ActionPlan, Department } from '../../types/domain';
 
 export default function Departments() {
   const navigate = useNavigate();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [actionPlans, setActionPlans] = useState<ActionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState('All');
@@ -30,11 +31,15 @@ export default function Departments() {
     setLoadError(null);
 
     try {
-      const loadedDepartments = await getDepartments();
+      const [loadedDepartments, loadedActionPlans] = await Promise.all([
+        getDepartments(),
+        getActionPlans(),
+      ]);
       if (loadRequestId.current !== requestId) {
         return;
       }
       setDepartments(loadedDepartments);
+      setActionPlans(loadedActionPlans);
     } catch (error) {
       if (loadRequestId.current !== requestId) {
         return;
@@ -54,9 +59,57 @@ export default function Departments() {
   const filteredDepts = filter === 'All' 
     ? departments 
     : departments.filter(d => d.riskLevel === filter);
+  const fairnessDeficitDept = [...departments].sort((a, b) => a.fairness - b.fairness)[0];
+  const strongestBufferDept = [...departments]
+    .filter((department) => department.riskLevel !== 'Critical')
+    .sort((a, b) => (b.resourceIndex + b.fairness) - (a.resourceIndex + a.fairness))[0];
+
+  const getDepartmentActionStatus = (dept: Department): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' } => {
+    const relatedPlan = actionPlans.find((plan) => (
+      plan.departmentId === dept.dbId || plan.department === dept.name
+    ));
+
+    if (relatedPlan) {
+      if (relatedPlan.status === 'Completed') return { label: 'Completed', variant: 'success' };
+      if (relatedPlan.status === 'In Progress') return { label: 'In Progress', variant: 'success' };
+      if (relatedPlan.status === 'Approved') return { label: 'Approved Plan', variant: 'default' };
+      if (relatedPlan.status === 'On Hold') return { label: 'On Hold', variant: 'secondary' };
+      return { label: relatedPlan.status, variant: 'outline' };
+    }
+
+    if (dept.riskLevel === 'Critical') return { label: 'Recommendation Required', variant: 'destructive' };
+    if (dept.riskLevel === 'High') return { label: 'Recommendation Ready', variant: 'warning' };
+    return { label: 'Monitoring', variant: 'secondary' };
+  };
 
   const handleExport = () => {
-    alert("Exporting Department List Data (CSV)...");
+    const rows = [
+      ['Department', 'Manager', 'Headcount', 'Burnout Score', 'Stress Score', 'Resource Index', 'Fairness', 'Risk Level', 'Action Status'],
+      ...filteredDepts.map((dept) => {
+        const actionStatus = getDepartmentActionStatus(dept);
+        return [
+          dept.name,
+          dept.manager,
+          String(dept.employeeCount),
+          String(dept.burnoutScore),
+          String(dept.stressScore),
+          String(dept.resourceIndex),
+          String(dept.fairness),
+          dept.riskLevel,
+          actionStatus.label,
+        ];
+      }),
+    ];
+    const csv = rows
+      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `insightloop-departments-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSaveDepartment = async () => {
@@ -201,20 +254,7 @@ export default function Departments() {
                   </td>
                 </tr>
               ) : filteredDepts.map((dept) => {
-                // Mock action status based on risk level for demo purposes
-                let actionStatus = 'No Recommendation Yet';
-                let statusVariant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' = 'secondary';
-                
-                if (dept.riskLevel === 'Critical') {
-                  actionStatus = 'Awaiting HR Approval';
-                  statusVariant = 'destructive';
-                } else if (dept.riskLevel === 'High') {
-                  actionStatus = 'Recommendation Ready';
-                  statusVariant = 'warning';
-                } else if (dept.name === 'Management') {
-                  actionStatus = 'In Progress';
-                  statusVariant = 'success';
-                }
+                const actionStatus = getDepartmentActionStatus(dept);
 
                 return (
                   <tr 
@@ -254,8 +294,8 @@ export default function Departments() {
                       </Badge>
                     </td>
                     <td className="px-6 py-4">
-                      <Badge variant={statusVariant} className="whitespace-nowrap">
-                        {actionStatus}
+                      <Badge variant={actionStatus.variant} className="whitespace-nowrap">
+                        {actionStatus.label}
                       </Badge>
                     </td>
                   </tr>
@@ -273,7 +313,13 @@ export default function Departments() {
             <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
             <div>
               <h4 className="font-semibold text-sm text-destructive">High Stress Pattern Detected</h4>
-              <p className="text-xs text-muted-foreground mt-1">DevOps and Sales show correlated spikes in stress and workload demands over the last 30 days.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {departments
+                  .filter((department) => department.riskLevel === 'Critical')
+                  .slice(0, 2)
+                  .map((department) => department.name)
+                  .join(' and ') || 'Critical departments'} show correlated spikes in stress and workload demands.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -282,7 +328,9 @@ export default function Departments() {
             <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5" />
             <div>
               <h4 className="font-semibold text-sm text-amber-500">Fairness Deficit</h4>
-              <p className="text-xs text-muted-foreground mt-1">Business Development reports critically low fairness perception, driving cynicism.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {fairnessDeficitDept?.name ?? 'The lowest-scoring department'} reports the lowest fairness score at {fairnessDeficitDept?.fairness ?? 0}/5.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -291,7 +339,9 @@ export default function Departments() {
             <AlertCircle className="w-5 h-5 text-emerald-500 mt-0.5" />
             <div>
               <h4 className="font-semibold text-sm text-emerald-500">Positive Manager Impact</h4>
-              <p className="text-xs text-muted-foreground mt-1">Legal department maintains moderate risk despite high demands, buffered by strong support.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {strongestBufferDept?.name ?? 'The strongest buffered department'} has the strongest combined resource and fairness buffer.
+              </p>
             </div>
           </CardContent>
         </Card>

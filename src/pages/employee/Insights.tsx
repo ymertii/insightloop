@@ -3,15 +3,30 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 import { Sparkles, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { fallbackEmployeeDashboard } from '../../data/fallbackData';
+import { useAsyncData } from '../../hooks/useAsyncData';
+import { getEmployeeDashboard } from '../../lib/api';
 
 export default function Insights() {
   const navigate = useNavigate();
+  const { data: employeeDashboard, isLoading, error } = useAsyncData(getEmployeeDashboard, fallbackEmployeeDashboard, []);
+  const sortedStrengths = [...employeeDashboard.strengths].sort((a, b) => Number(b.A) - Number(a.A));
+  const topStrengths = sortedStrengths.slice(0, 2);
+  const frictionPoints = sortedStrengths.slice(-2).reverse();
+  const latestTrend = employeeDashboard.personalTrend['3M']?.at(-1);
+  const latestStress = Number(latestTrend?.stress ?? employeeDashboard.miniTrend.at(-1)?.value ?? 0);
+  const latestRecovery = Number(latestTrend?.recovery ?? 0);
+  const latestEngagement = Number(latestTrend?.engagement ?? 0);
+  const stressLabel = latestStress >= 3.5 ? 'elevated' : latestStress >= 2.6 ? 'moderate' : 'low';
+  const recoveryLabel = latestRecovery >= 3.5 ? 'strong' : latestRecovery >= 2.8 ? 'stable' : 'needs support';
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       <div>
         <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Personal Insights</h2>
-        <p className="text-slate-500">AI-generated analysis based on your recent survey responses.</p>
+        <p className="text-slate-500">
+          {isLoading ? 'Loading your latest backend snapshot...' : error ? error : 'AI-generated analysis based on your recent survey responses.'}
+        </p>
       </div>
 
       <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100 shadow-sm rounded-3xl">
@@ -23,12 +38,11 @@ export default function Insights() {
             <h3 className="text-xl font-bold text-slate-800">Your Wellbeing Summary</h3>
           </div>
           <p className="text-slate-700 leading-relaxed text-lg">
-            Based on your recent responses, you are showing strong resilience and excellent peer support. 
-            However, there are indications that your current workload is creating moderate stress, 
-            particularly because you feel a lack of autonomy over your schedule. 
+            Based on your latest response pattern, your stress load is currently {stressLabel}, while recovery readiness is {recoveryLabel}.
+            Your strongest signals are {topStrengths.map((strength) => strength.subject).join(' and ')}, which are helping buffer day-to-day pressure.
             <br/><br/>
-            Your recovery metrics are stable, meaning you are successfully disconnecting after work, 
-            which is protecting you from deeper burnout risk.
+            The dimensions needing the most attention are {frictionPoints.map((point) => point.subject).join(' and ')}.
+            Your latest engagement score is {latestEngagement || 'not yet available'}, so the best next step is to protect recovery time while improving control over high-friction tasks.
           </p>
         </CardContent>
       </Card>
@@ -43,14 +57,14 @@ export default function Insights() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-4">
-              <li className="flex items-start">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 mt-2 mr-3 flex-shrink-0"></div>
-                <p className="text-slate-600"><strong>Strong Peer Support:</strong> You feel well-supported by your immediate team members.</p>
-              </li>
-              <li className="flex items-start">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 mt-2 mr-3 flex-shrink-0"></div>
-                <p className="text-slate-600"><strong>Effective Recovery:</strong> You maintain good boundaries between work and personal time.</p>
-              </li>
+              {topStrengths.map((strength) => (
+                <li className="flex items-start" key={strength.subject}>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 mt-2 mr-3 flex-shrink-0"></div>
+                  <p className="text-slate-600">
+                    <strong>{strength.subject}:</strong> Your latest score is {strength.A}/100.
+                  </p>
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>
@@ -64,14 +78,14 @@ export default function Insights() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-4">
-              <li className="flex items-start">
-                <div className="w-2 h-2 rounded-full bg-amber-500 mt-2 mr-3 flex-shrink-0"></div>
-                <p className="text-slate-600"><strong>Schedule Autonomy:</strong> You reported feeling restricted in how you manage your daily tasks.</p>
-              </li>
-              <li className="flex items-start">
-                <div className="w-2 h-2 rounded-full bg-amber-500 mt-2 mr-3 flex-shrink-0"></div>
-                <p className="text-slate-600"><strong>Pacing:</strong> The speed of incoming requests is occasionally overwhelming.</p>
-              </li>
+              {frictionPoints.map((point) => (
+                <li className="flex items-start" key={point.subject}>
+                  <div className="w-2 h-2 rounded-full bg-amber-500 mt-2 mr-3 flex-shrink-0"></div>
+                  <p className="text-slate-600">
+                    <strong>{point.subject}:</strong> This is one of your lower current scores at {point.A}/100.
+                  </p>
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>

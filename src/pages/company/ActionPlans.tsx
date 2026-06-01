@@ -186,9 +186,10 @@ export default function ActionPlans() {
                    </div>
                    <span className="text-sm font-medium">Tracking</span>
                  </div>
-                 {viewingPlan.status === 'In Progress' && <Progress value={45} className="h-2 mt-2" />}
-                 {viewingPlan.status === 'Completed' && <Progress value={100} className="h-2 mt-2" />}
-                 {viewingPlan.status === 'Approved' && <Progress value={0} className="h-2 mt-2" />}
+                 <Progress
+                   value={viewingPlan.progressPercent ?? (viewingPlan.status === 'Completed' ? 100 : 0)}
+                   className="h-2 mt-2"
+                 />
                </div>
             </CardContent>
           </Card>

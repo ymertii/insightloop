@@ -2,12 +2,29 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { MessageCircle, Send, Info } from 'lucide-react';
+import { useStore } from '../../store/useStore';
+import { fallbackEmployeeDashboard } from '../../data/fallbackData';
+import { useAsyncData } from '../../hooks/useAsyncData';
+import { getActiveEmployeeAssignment, getEmployeeDashboard } from '../../lib/api';
 
 export default function HelpCoach() {
-  const [messages, setMessages] = useState([
-    { role: 'system', content: 'Hi Jane. I am your Help Coach. I can help you understand your wellbeing stats, suggest resources, or guide you to organizational support. How can I help today?' }
-  ]);
+  const { libraryResources } = useStore();
+  const { data: activeAssignment } = useAsyncData(getActiveEmployeeAssignment, null, []);
+  const { data: employeeDashboard } = useAsyncData(getEmployeeDashboard, fallbackEmployeeDashboard, []);
+  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [input, setInput] = useState('');
+  const firstName = activeAssignment?.employeeName?.split(' ')[0];
+  const frictionPoint = [...employeeDashboard.strengths].sort((a, b) => Number(a.A) - Number(b.A))[0];
+  const recommendedResource = libraryResources.find((resource) => resource.category === 'Guide') ?? libraryResources[0];
+
+  React.useEffect(() => {
+    if (messages.length > 0) return;
+
+    setMessages([{
+      role: 'system',
+      content: `Hi${firstName ? ` ${firstName}` : ''}. I am your Help Coach. I can help you understand your wellbeing stats, suggest resources, or guide you to organizational support. How can I help today?`,
+    }]);
+  }, [firstName, messages.length]);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -16,11 +33,10 @@ export default function HelpCoach() {
     setMessages(newMessages);
     setInput('');
 
-    // Mock AI response
     setTimeout(() => {
       setMessages([...newMessages, { 
         role: 'system', 
-        content: "Based on your recent profile, it looks like you're experiencing some friction around schedule autonomy. I recommend checking out the 'Boundary Setting Guide' in the Library. Would you like me to link it for you?" 
+        content: `Based on your latest profile, ${frictionPoint?.subject ?? 'your lowest-scoring support area'} is the area that may need the most attention right now. I recommend checking "${recommendedResource?.title ?? 'the recommended guide'}" in the Library.`
       }]);
     }, 1000);
   };

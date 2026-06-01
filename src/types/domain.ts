@@ -59,6 +59,10 @@ export interface Report {
   status: string;
   content?: string;
   category: ReportCategory;
+  periodStart?: string;
+  periodEnd?: string;
+  periodLabel?: string;
+  sections?: Array<Record<string, unknown>>;
 }
 
 export type ResourceCategory = 'Education' | 'Practice' | 'Guide' | 'Recovery' | 'Exercise' | 'Meditation' | 'Blog';
@@ -112,6 +116,7 @@ export interface Invoice {
 
 export interface ActionPlan {
   id: string;
+  departmentId?: string | null;
   title: string;
   department: string;
   intervention: string;
@@ -121,6 +126,7 @@ export interface ActionPlan {
   kpi: string;
   lastUpdated: string;
   details: string;
+  progressPercent?: number;
 }
 
 export interface InventoryItem {
@@ -148,6 +154,7 @@ export interface CompletedTest {
   id: string;
   name: string;
   date: string;
+  target?: string;
   rate?: number;
   responses?: number;
   finding?: string;
@@ -164,8 +171,66 @@ export interface ActiveInventory {
   name: string;
   target: string;
   endsIn: string;
+  invitedCount?: number;
+  responseCount?: number;
+  reminderPendingCount?: number;
   responseRate: number;
   status: string;
+  averageTimeLabel?: string;
+  abandonmentRate?: number;
+  earlyInsight?: string;
+}
+
+export interface DepartmentRecommendation {
+  id: string;
+  title: string;
+  rationale: string;
+  impact: string;
+  effort: string;
+  cost: string;
+  owner: string;
+  timeline: string;
+  reviewDate: string;
+  closenessCoefficient?: string;
+}
+
+export interface DepartmentResponseRate {
+  department: string;
+  rate: number;
+  responses: number;
+}
+
+export interface EmployeeAssessmentAssignment {
+  id: string;
+  employeeName?: string;
+  name: string;
+  dueLabel: string;
+  progress: number;
+  questions: Array<{
+    id: string;
+    question: string;
+    options: string[];
+  }>;
+}
+
+export interface CompanyRiskSummary {
+  companyId: string;
+  summary: string;
+  metrics: Array<{
+    label: string;
+    value: string;
+    tone: RiskLevel;
+  }>;
+  drivers: string[];
+  recommendations: string[];
+  generatedAt: string;
+}
+
+export interface PlatformActivity {
+  id: string;
+  tenant: string;
+  action: string;
+  time: string;
 }
 
 export interface BenchmarkMetric {
@@ -195,6 +260,12 @@ export interface RadarMetric {
 }
 
 export interface EmployeeDashboardData {
+  dailySnapshot?: {
+    mood: string;
+    stress: string;
+    energy: string;
+    sleepHours?: number;
+  };
   strengths: RadarMetric[];
   miniTrend: TrendPoint[];
   recentTests: Array<{ id: string; name: string; date: string }>;

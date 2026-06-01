@@ -14,6 +14,19 @@ export default function MyStats() {
   const { data: employeeDashboard, isLoading, error } = useAsyncData(getEmployeeDashboard, fallbackEmployeeDashboard, []);
   const personalTrendData = employeeDashboard.personalTrend;
   const pastTests = employeeDashboard.pastTests;
+  const selectedTrend = personalTrendData[timeRange] ?? [];
+  const latestTrend = selectedTrend.slice(-1)[0];
+  const previousTrend = selectedTrend.slice(-2)[0] ?? latestTrend;
+  const stressValue = Number(latestTrend?.stress ?? 0);
+  const recoveryValue = Number(latestTrend?.recovery ?? 0);
+  const stressDelta = stressValue - Number(previousTrend?.stress ?? stressValue);
+  const recoveryDelta = recoveryValue - Number(previousTrend?.recovery ?? recoveryValue);
+  const burnoutRisk = stressValue >= 3.5 && recoveryValue < 3 ? 'High' : stressValue >= 3 ? 'Moderate' : 'Low';
+  const stressLabel = stressValue >= 3.6 ? 'High' : stressValue >= 2.7 ? 'Moderate' : 'Low';
+  const recoveryLabel = recoveryValue >= 3.6 ? 'Good' : recoveryValue >= 3 ? 'Stable' : 'Needs Focus';
+  const burnoutTone = burnoutRisk === 'High' ? 'text-rose-500' : burnoutRisk === 'Moderate' ? 'text-amber-500' : 'text-emerald-500';
+  const stressTone = stressDelta > 0.1 ? 'text-amber-500' : 'text-emerald-500';
+  const recoveryTone = recoveryDelta >= 0 ? 'text-emerald-500' : 'text-amber-500';
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -28,22 +41,22 @@ export default function MyStats() {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-muted-foreground">Burnout Risk</p>
-            <h3 className="text-3xl font-bold mt-2">Low</h3>
-            <p className="text-sm text-emerald-500 mt-2 font-medium">Stable over last 30 days</p>
+            <h3 className="text-3xl font-bold mt-2">{burnoutRisk}</h3>
+            <p className={`text-sm mt-2 font-medium ${burnoutTone}`}>Derived from latest stress and recovery scores</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-muted-foreground">Stress Load</p>
-            <h3 className="text-3xl font-bold mt-2">Moderate</h3>
-            <p className="text-sm text-amber-500 mt-2 font-medium">Slightly elevated</p>
+            <h3 className="text-3xl font-bold mt-2">{stressLabel}</h3>
+            <p className={`text-sm mt-2 font-medium ${stressTone}`}>{stressValue.toFixed(1)}/5 latest score</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-muted-foreground">Recovery Readiness</p>
-            <h3 className="text-3xl font-bold mt-2">Good</h3>
-            <p className="text-sm text-emerald-500 mt-2 font-medium">Improving trend</p>
+            <h3 className="text-3xl font-bold mt-2">{recoveryLabel}</h3>
+            <p className={`text-sm mt-2 font-medium ${recoveryTone}`}>{recoveryValue.toFixed(1)}/5 latest score</p>
           </CardContent>
         </Card>
       </div>
@@ -198,7 +211,7 @@ export default function MyStats() {
               </div>
               
               <div className="pt-6 border-t border-slate-100 flex justify-end space-x-3 shrink-0">
-                <Button variant="outline" onClick={() => { alert('Downloading full PDF report...'); setSelectedTest(null); }} className="text-slate-600 hover:bg-slate-50">
+                <Button variant="outline" onClick={() => { window.print(); setSelectedTest(null); }} className="text-slate-600 hover:bg-slate-50">
                   <Download className="w-4 h-4 mr-2" /> Download PDF
                 </Button>
                 <Button onClick={() => setSelectedTest(null)} className="bg-teal-600 hover:bg-teal-700 text-white">Close</Button>

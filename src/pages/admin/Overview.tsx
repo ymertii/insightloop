@@ -4,12 +4,13 @@ import { Badge } from '../../components/ui/Badge';
 import { Building2, Users, FileText, AlertTriangle, Activity } from 'lucide-react';
 import { fallbackActiveInventories, fallbackCompanies, fallbackDepartments } from '../../data/fallbackData';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { getActiveInventories, getCompanies, getDepartments } from '../../lib/api';
+import { getActiveInventories, getCompanies, getDepartments, getPlatformActivity } from '../../lib/api';
 
 export default function Overview() {
   const { data: companies, isLoading } = useAsyncData(getCompanies, fallbackCompanies, []);
   const { data: departments } = useAsyncData(getDepartments, fallbackDepartments, []);
   const { data: activeInventories } = useAsyncData(getActiveInventories, fallbackActiveInventories, []);
+  const { data: recentActivity } = useAsyncData(getPlatformActivity, [], []);
 
   const activeTenants = companies.filter((company) => company.status === 'Active').length;
   const totalEmployees = companies.reduce((sum, company) => sum + company.employees, 0);
@@ -22,12 +23,6 @@ export default function Overview() {
     sector,
     percent: Math.round((count / Math.max(companies.length, 1)) * 100),
   }));
-  const recentActivity = companies.slice(0, 4).map((company, index) => ({
-    tenant: company.name,
-    action: ['Generated new AI Report', 'Launched inventory campaign', 'Created Action Plan', 'Updated tenant profile'][index] ?? 'Updated tenant profile',
-    time: ['2 hours ago', '5 hours ago', '1 day ago', '2 days ago'][index] ?? '2 days ago',
-  }));
-
   return (
     <div className="space-y-6">
       <div>

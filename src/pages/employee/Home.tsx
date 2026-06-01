@@ -8,22 +8,25 @@ import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Responsi
 import { useStore } from '../../store/useStore';
 import { fallbackEmployeeDashboard } from '../../data/fallbackData';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { getEmployeeDashboard } from '../../lib/api';
+import { getActiveEmployeeAssignment, getEmployeeDashboard } from '../../lib/api';
 
 export default function Home() {
   const navigate = useNavigate();
   const { libraryResources } = useStore();
   const { data: employeeDashboard } = useAsyncData(getEmployeeDashboard, fallbackEmployeeDashboard, []);
+  const { data: activeAssignment } = useAsyncData(getActiveEmployeeAssignment, null, []);
   const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
   const [surveyStep, setSurveyStep] = useState(0);
 
   const handleStartSurvey = () => {
+    if (!activeAssignment) return;
     setIsSurveyModalOpen(true);
     setSurveyStep(1);
   };
 
   const handleNextStep = () => {
-    if (surveyStep < 3) {
+    const totalQuestions = activeAssignment?.questions.length ?? 0;
+    if (surveyStep < totalQuestions) {
       setSurveyStep(surveyStep + 1);
     } else {
       setIsSurveyModalOpen(false);
@@ -34,6 +37,17 @@ export default function Home() {
 
   const recommendedBlog = libraryResources.find(r => r.category === 'Blog') || libraryResources[0];
   const recommendedExercise = libraryResources.find(r => r.category === 'Exercise') || libraryResources[1];
+  const latestTrend = employeeDashboard.personalTrend['3M']?.slice(-1)[0] ?? employeeDashboard.personalTrend['6M']?.slice(-1)[0];
+  const stressValue = Number(latestTrend?.stress ?? 0);
+  const recoveryValue = Number(latestTrend?.recovery ?? 0);
+  const engagementValue = Number(latestTrend?.engagement ?? 0);
+  const dailySnapshot = employeeDashboard.dailySnapshot;
+  const firstName = activeAssignment?.employeeName?.split(' ')[0];
+  const moodLabel = dailySnapshot?.mood ?? (engagementValue >= 3.8 ? 'Positive' : engagementValue >= 3 ? 'Neutral' : 'Low');
+  const stressLabel = dailySnapshot?.stress ?? (stressValue >= 3.6 ? 'High' : stressValue >= 2.7 ? 'Moderate' : 'Low');
+  const energyLabel = dailySnapshot?.energy ?? (recoveryValue >= 3.6 ? 'Restored' : recoveryValue >= 3 ? 'Stable' : 'Low');
+  const sleepLabel = dailySnapshot?.sleepHours ? `${dailySnapshot.sleepHours.toFixed(1)} hrs` : `${recoveryValue.toFixed(1)}/5`;
+  const currentQuestion = activeAssignment?.questions[surveyStep - 1];
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -41,7 +55,7 @@ export default function Home() {
       <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-teal-50 rounded-full blur-3xl -mr-20 -mt-20 opacity-50"></div>
         <div className="relative z-10">
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Good Morning, Jane</h2>
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">Good Morning{firstName ? `, ${firstName}` : ''}</h2>
           <p className="text-slate-600 text-lg">Here's your personal wellbeing snapshot for today.</p>
         </div>
       </div>
@@ -53,7 +67,7 @@ export default function Home() {
             <div className="p-3 bg-amber-50 text-amber-500 rounded-xl"><Sun className="w-6 h-6" /></div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Mood</p>
-              <p className="font-semibold text-slate-800">Positive</p>
+              <p className="font-semibold text-slate-800">{moodLabel}</p>
             </div>
           </CardContent>
         </Card>
@@ -62,7 +76,7 @@ export default function Home() {
             <div className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Brain className="w-6 h-6" /></div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Stress</p>
-              <p className="font-semibold text-slate-800">Moderate</p>
+              <p className="font-semibold text-slate-800">{stressLabel}</p>
             </div>
           </CardContent>
         </Card>
@@ -71,7 +85,7 @@ export default function Home() {
             <div className="p-3 bg-emerald-50 text-emerald-500 rounded-xl"><Battery className="w-6 h-6" /></div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Energy</p>
-              <p className="font-semibold text-slate-800">Stable</p>
+              <p className="font-semibold text-slate-800">{energyLabel}</p>
             </div>
           </CardContent>
         </Card>
@@ -79,8 +93,8 @@ export default function Home() {
           <CardContent className="p-5 flex items-center space-x-4">
             <div className="p-3 bg-indigo-50 text-indigo-500 rounded-xl"><Moon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-slate-500 font-medium">Sleep</p>
-              <p className="font-semibold text-slate-800">7.2 hrs</p>
+              <p className="text-sm text-slate-500 font-medium">{dailySnapshot?.sleepHours ? 'Sleep' : 'Recovery'}</p>
+              <p className="font-semibold text-slate-800">{sleepLabel}</p>
             </div>
           </CardContent>
         </Card>
@@ -94,13 +108,15 @@ export default function Home() {
             <CardContent className="p-8">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-1">Maslach Burnout Inventory (MBI)</h3>
-                  <p className="text-slate-500">Your input helps shape organizational support.</p>
+                  <h3 className="text-xl font-bold text-slate-800 mb-1">{activeAssignment?.name ?? 'No active assessment'}</h3>
+                  <p className="text-slate-500">
+                    {activeAssignment ? 'Your input helps shape organizational support.' : 'You are currently clear of assigned check-ins.'}
+                  </p>
                 </div>
-                <span className="px-3 py-1 bg-rose-100 text-rose-700 text-xs font-bold rounded-full">Due in 3 days</span>
+                <span className="px-3 py-1 bg-rose-100 text-rose-700 text-xs font-bold rounded-full">{activeAssignment?.dueLabel ?? 'No due date'}</span>
               </div>
-              <Progress value={10} className="h-2 mb-6 bg-slate-100" indicatorColor="bg-teal-500" />
-              <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl py-6 text-lg" onClick={handleStartSurvey}>
+              <Progress value={activeAssignment?.progress ?? 0} className="h-2 mb-6 bg-slate-100" indicatorColor="bg-teal-500" />
+              <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl py-6 text-lg" onClick={handleStartSurvey} disabled={!activeAssignment}>
                 Start Survey
               </Button>
             </CardContent>
@@ -235,7 +251,7 @@ export default function Home() {
              <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                <div>
                  <h3 className="font-bold text-slate-800">Maslach Burnout Inventory</h3>
-                 <p className="text-xs text-slate-500 font-medium">Question {surveyStep} of 3</p>
+                 <p className="text-xs text-slate-500 font-medium">Question {surveyStep} of {activeAssignment?.questions.length ?? 0}</p>
                </div>
                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600 rounded-full" onClick={() => setIsSurveyModalOpen(false)}>
                  <X className="w-5 h-5" />
@@ -243,35 +259,11 @@ export default function Home() {
              </div>
              <CardContent className="p-8">
                <div className="space-y-6">
-                 {surveyStep === 1 && (
+                 {currentQuestion && (
                    <>
-                    <h4 className="text-lg font-semibold text-slate-800 text-center">I feel emotionally drained from my work.</h4>
+                    <h4 className="text-lg font-semibold text-slate-800 text-center">{currentQuestion.question}</h4>
                     <div className="flex flex-col space-y-3">
-                      {['Never', 'A few times a year', 'Once a month', 'A few times a month', 'Every day'].map(opt => (
-                        <Button key={opt} variant="outline" className="justify-start py-6 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200" onClick={handleNextStep}>
-                          {opt}
-                        </Button>
-                      ))}
-                    </div>
-                   </>
-                 )}
-                 {surveyStep === 2 && (
-                   <>
-                    <h4 className="text-lg font-semibold text-slate-800 text-center">I feel I'm working too hard on my job.</h4>
-                    <div className="flex flex-col space-y-3">
-                      {['Never', 'A few times a year', 'Once a month', 'A few times a month', 'Every day'].map(opt => (
-                        <Button key={opt} variant="outline" className="justify-start py-6 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200" onClick={handleNextStep}>
-                          {opt}
-                        </Button>
-                      ))}
-                    </div>
-                   </>
-                 )}
-                 {surveyStep === 3 && (
-                   <>
-                    <h4 className="text-lg font-semibold text-slate-800 text-center">I can easily understand how my colleagues feel about things.</h4>
-                    <div className="flex flex-col space-y-3">
-                      {['Never', 'A few times a year', 'Once a month', 'A few times a month', 'Every day'].map(opt => (
+                      {currentQuestion.options.map(opt => (
                         <Button key={opt} variant="outline" className="justify-start py-6 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200" onClick={handleNextStep}>
                           {opt}
                         </Button>

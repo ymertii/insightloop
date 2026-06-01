@@ -496,3 +496,138 @@ on conflict (id) do update set
   details = excluded.details,
   progress_percent = excluded.progress_percent,
   last_updated_at = excluded.last_updated_at;
+
+-- Demo expansion rows used by dynamic frontend screens. This block mirrors
+-- 20260602000000_expand_demo_dynamic_data.sql so local resets stay populated
+-- after the base seed upserts above.
+
+insert into public.companies (
+  id, tenant_code, name, sector, website, employee_count, active_employee_count,
+  status, risk_level, contact_name, contact_email, contact_phone,
+  payment_status, subscription_plan, next_billing_date
+) values
+  ('10000000-0000-0000-0000-000000000005', 'TEN-MED42', 'MediCore Health', 'Healthcare', 'https://medicore.example', 2100, 1760, 'active', 'moderate', 'Nora Patel', 'nora@medicore.example', '+1 555 0505', 'paid', 'enterprise', '2026-07-01'),
+  ('10000000-0000-0000-0000-000000000006', 'TEN-EDU18', 'EduNova Labs', 'Education', 'https://edunova.example', 690, 640, 'active', 'low', 'Owen Wright', 'owen@edunova.example', '+1 555 0606', 'paid', 'professional', '2026-07-15'),
+  ('10000000-0000-0000-0000-000000000007', 'TEN-LOG77', 'LogiChain Global', 'Logistics', 'https://logichain.example', 5300, 4975, 'active', 'high', 'Priya Shah', 'priya@logichain.example', '+1 555 0707', 'overdue', 'enterprise', '2026-06-20'),
+  ('10000000-0000-0000-0000-000000000008', 'TEN-GRN55', 'GreenWorks Manufacturing', 'Manufacturing', 'https://greenworks.example', 1450, 980, 'onboarding', 'unknown', 'Mateo Ruiz', 'mateo@greenworks.example', '+1 555 0808', 'trial', 'professional', '2026-07-30')
+on conflict (id) do update set
+  tenant_code = excluded.tenant_code,
+  name = excluded.name,
+  sector = excluded.sector,
+  website = excluded.website,
+  employee_count = excluded.employee_count,
+  active_employee_count = excluded.active_employee_count,
+  status = excluded.status,
+  risk_level = excluded.risk_level,
+  contact_name = excluded.contact_name,
+  contact_email = excluded.contact_email,
+  contact_phone = excluded.contact_phone,
+  payment_status = excluded.payment_status,
+  subscription_plan = excluded.subscription_plan,
+  next_billing_date = excluded.next_billing_date;
+
+update public.employee_dashboard_snapshots
+set payload = payload || '{
+  "dailySnapshot":{"mood":"Positive","stress":"Moderate","energy":"Restored","sleepHours":7.2}
+}'::jsonb
+where company_member_id = '30000000-0000-0000-0000-000000000105';
+
+update public.assessment_runs
+set avg_completion_seconds = 522,
+    abandoned_count = 263,
+    reminder_pending_count = greatest(invited_count - response_count, 0),
+    finding = 'Early data suggests a significant variance in workload perception between DevOps, Sales, and Operations. Final insights will be generated upon completion.'
+where id = '80000000-0000-0000-0000-000000000001';
+
+insert into public.assessment_assignments (
+  id, company_id, assessment_run_id, company_member_id, status, due_at,
+  progress_percent, reminder_count, last_reminded_at, metadata
+) values
+  ('f0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000105', 'in_progress', '2026-06-04 17:00:00+00', 45, 1, '2026-06-01 09:00:00+00', '{"currentQuestion":3,"estimatedMinutes":6}'::jsonb),
+  ('f0000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000101', 'assigned', '2026-06-05 17:00:00+00', 0, 0, null, '{"estimatedMinutes":3}'::jsonb)
+on conflict (assessment_run_id, company_member_id) do update set
+  status = excluded.status,
+  due_at = excluded.due_at,
+  progress_percent = excluded.progress_percent,
+  reminder_count = excluded.reminder_count,
+  last_reminded_at = excluded.last_reminded_at,
+  metadata = excluded.metadata;
+
+insert into public.assessment_department_stats (
+  id, company_id, assessment_run_id, department_id, invited_count, response_count,
+  response_rate, avg_completion_seconds, abandoned_count
+) values
+  ('f1000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000008', 28, 24, 85.71, 610, 1),
+  ('f1000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000004', 120, 91, 75.83, 505, 8),
+  ('f1000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000005', 250, 171, 68.40, 544, 16),
+  ('f1000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000011', 180, 126, 70.00, 530, 11),
+  ('f1000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000012', 35, 30, 85.71, 552, 2),
+  ('f1000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000001', '80000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003', 38, 31, 81.58, 490, 1)
+on conflict (assessment_run_id, department_id) do update set
+  invited_count = excluded.invited_count,
+  response_count = excluded.response_count,
+  response_rate = excluded.response_rate,
+  avg_completion_seconds = excluded.avg_completion_seconds,
+  abandoned_count = excluded.abandoned_count;
+
+insert into public.activity_events (
+  id, company_id, actor_name, event_type, title, description, severity, occurred_at, metadata
+) values
+  ('f2000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'AI Narrative Engine', 'report_generated', 'DevOps Diagnostic generated', 'Department PDF report was generated and published.', 'info', '2026-06-01 18:20:00+00', '{"reportId":"90000000-0000-0000-0000-000000000002"}'::jsonb),
+  ('f2000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Alice Smith', 'inventory_launched', 'Q2 Wellbeing Assessment launched', '18,400 employees invited.', 'info', '2026-05-15 09:00:00+00', '{}'::jsonb),
+  ('f2000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000007', 'Priya Shah', 'billing_alert', 'Invoice overdue for LogiChain Global', 'Enterprise invoice moved to overdue status.', 'warning', '2026-05-31 12:10:00+00', '{}'::jsonb),
+  ('f2000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000005', 'Nora Patel', 'tenant_onboarded', 'MediCore Health completed onboarding', 'Healthcare tenant activated executive dashboards.', 'success', '2026-05-28 14:25:00+00', '{}'::jsonb),
+  ('f2000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', 'Tom Baker', 'action_plan_updated', 'DevOps flexible work pilot approved', 'Manager accepted the recommended intervention plan.', 'info', '2026-05-25 09:00:00+00', '{}'::jsonb),
+  ('f2000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000008', 'Mateo Ruiz', 'company_request', 'GreenWorks trial workspace created', 'Manufacturing pilot tenant entered onboarding.', 'info', '2026-05-24 11:45:00+00', '{}'::jsonb)
+on conflict (id) do update set
+  title = excluded.title,
+  description = excluded.description,
+  severity = excluded.severity,
+  occurred_at = excluded.occurred_at,
+  metadata = excluded.metadata;
+
+insert into public.company_risk_signals (
+  id, company_id, signal_key, title, severity, score, trend_label,
+  summary, evidence, recommendations
+) values
+  ('f3000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'burnout-elevated', 'Burnout Risk (MBI)', 'critical', 3.42, '+18%', 'Critical departments show sustained burnout pressure across DevOps, Sales, and Operations.', '{"departments":["DevOps","Sales","Operations"]}'::jsonb, array['Prioritize workload redesign', 'Run manager calibration sessions']),
+  ('f3000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'pss-moderate', 'Perceived Stress (PSS)', 'high', 3.18, '+7%', 'Perceived stress is above internal target and close to the technology benchmark.', '{"benchmark":3.6,"current":3.18}'::jsonb, array['Increase recovery windows', 'Monitor weekly stress trend']),
+  ('f3000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'resources-stable', 'Engagement/Resources (JD-R)', 'moderate', 3.04, '-2%', 'Resource availability is stable but not strong enough to offset demand in critical teams.', '{"resourceIndex":3.04}'::jsonb, array['Shift resources toward critical departments']),
+  ('f3000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000005', 'clinical-burnout', 'Care Team Burnout', 'moderate', 2.91, '+4%', 'Care teams show moderate load but high peer support.', '{"sector":"Healthcare"}'::jsonb, array['Protect post-shift recovery time']),
+  ('f3000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000007', 'logistics-demand', 'Route Planning Demand', 'high', 3.61, '+13%', 'Logistics planning teams show elevated demand and low schedule control.', '{"sector":"Logistics"}'::jsonb, array['Review route planning staffing', 'Add dispatcher recovery buffers']),
+  ('f3000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000006', 'faculty-support', 'Faculty Support Strength', 'low', 1.82, '-5%', 'EduNova has low burnout risk and strong support indicators.', '{"sector":"Education"}'::jsonb, array['Maintain monthly pulse cadence'])
+on conflict (company_id, signal_key) do update set
+  title = excluded.title,
+  severity = excluded.severity,
+  score = excluded.score,
+  trend_label = excluded.trend_label,
+  summary = excluded.summary,
+  evidence = excluded.evidence,
+  recommendations = excluded.recommendations;
+
+update public.reports
+set period_start = '2026-05-01',
+    period_end = '2026-05-31',
+    period_label = 'May 2026',
+    sections = '[{"key":"summary","title":"General Situation Summary","order":1},{"key":"kpis","title":"Key Performance Indicators","order":2},{"key":"alerts","title":"Critical Early Warning Signals","order":3},{"key":"trend","title":"AI Trend Analysis","order":4},{"key":"intervention_plan","title":"Recommended Intervention Plan","order":5}]'::jsonb,
+    content = '{
+      "summary":"AI analysis indicates a recurring pattern of high tempo combined with limited recovery time, increasing long-term burnout risk in DevOps.",
+      "participationRate":92,
+      "participationDelta":"+5%",
+      "kpiDeltas":{"stress":"+1.2","burnout":"+22%","workload":"+18","morale":"-0.1","participation":"+5%"},
+      "trendCaption":"Peaks on May 18 and May 24 correlate with production deadlines and campaign launches.",
+      "emotionalThemes":["Fatigue","Time pressure","Loss of control"],
+      "warnings":[
+        {"title":"High stress for 3 consecutive weeks","body":"Four employees show sustained high-stress levels, a key predictor of imminent burnout.","risk":"Critical"},
+        {"title":"Sleep disturbance pattern","body":"Late-night activity increased and negative morning sentiment rose during the last pulse.","risk":"High"},
+        {"title":"Workload imbalance","body":"DevOps reports higher workload than peer teams with lower recovery buffers.","risk":"Moderate"}
+      ],
+      "interventionPlan":{
+        "shortTerm":["Manager 1:1s with high-risk individuals.","Immediate project reprioritization meeting.","Mandatory no-meeting block for deep work."],
+        "mediumTerm":["Team workshop on workload management.","Review and clarify roles and responsibilities.","Implement weekly feedback check-ins."],
+        "longTerm":["Review campaign and process planning.","Resource allocation review for Q1 2026.","Leadership coaching for the manager."]
+      },
+      "managerFeedback":["Deficiencies noted in feedback frequency, planning clarity, and role prioritization.","Lack of planning","Cannot keep up","Communication breakdown"],
+      "generalAssessment":"The department is currently in a high-risk state driven by excessive workload and planning deficiencies. The proposed intervention plan is expected to reduce overall burnout risk by 30-40% within 8 weeks if implemented effectively."
+    }'::jsonb::text
+where id = '90000000-0000-0000-0000-000000000002';

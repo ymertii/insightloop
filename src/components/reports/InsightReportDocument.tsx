@@ -54,6 +54,24 @@ const average = (values: number[]) => {
   return usableValues.reduce((sum, value) => sum + value, 0) / usableValues.length;
 };
 
+const parseReportContent = (content?: string): Record<string, any> => {
+  if (!content) return {};
+
+  try {
+    const parsed = JSON.parse(content);
+    return typeof parsed === 'object' && parsed !== null ? parsed : { summary: content };
+  } catch {
+    return { summary: content };
+  }
+};
+
+const formatPeriod = (report: Report, content: Record<string, any>) => {
+  if (report.periodLabel) return report.periodLabel;
+  if (content.periodLabel) return content.periodLabel;
+  if (report.periodStart && report.periodEnd) return `${report.periodStart} - ${report.periodEnd}`;
+  return report.date;
+};
+
 const buildTrendData = (department: Department) => {
   const stressBase = department.stressScore || 3;
   const burnoutBase = department.burnoutScore || 3;
@@ -98,6 +116,7 @@ const getRiskRows = (department: Department, departments: Department[]) => {
 };
 
 const buildReportModel = (report: Report, departments: Department[]) => {
+  const content = parseReportContent(report.content);
   const isDepartmentReport = report.category === 'Department' || report.type.toLowerCase().includes('department');
   const selectedDepartment = inferDepartment(report, departments);
   const safeDepartment: Department =
@@ -138,19 +157,61 @@ const buildReportModel = (report: Report, departments: Department[]) => {
   const emotionData = buildEmotionData(department);
   const negativeEmotion = emotionData.find((item) => item.name === 'Negative')?.value ?? 0;
   const riskRows = getRiskRows(department, departments);
+  const topIntervention = content.recommendedActions?.[0] ?? 'targeted workload redesign';
+  const warningRiskDepartment = departments.find((item) => item.riskLevel === 'Critical') ?? department;
+  const defaultInterventionPlan = {
+    shortTerm: [
+      `Run focused 1:1 reviews for ${department.name}.`,
+      `Reprioritize the highest-pressure workstream.`,
+      'Protect deep-work blocks for recovery and delivery.',
+    ],
+    mediumTerm: [
+      'Review workload ownership and role clarity.',
+      'Add weekly team feedback and support check-ins.',
+      `Track ${topIntervention} adoption with manager follow-up.`,
+    ],
+    longTerm: [
+      'Review resource allocation against demand trends.',
+      'Refresh planning cadence for the next operating cycle.',
+      'Coach managers on prioritization and recovery norms.',
+    ],
+  };
 
   return {
     burnoutRisk,
     department,
     emotionData,
+    emotionalThemes: content.emotionalThemes ?? ['Fatigue', 'Time pressure', 'Loss of control'],
+    generalAssessment: content.generalAssessment ?? `${department.name} is in a ${department.riskLevel.toLowerCase()} risk state with stress at ${department.stressScore.toFixed(1)}/5 and resource health at ${department.resourceIndex.toFixed(1)}/5.`,
+    interventionPlan: content.interventionPlan ?? defaultInterventionPlan,
     isDepartmentReport,
+    kpiDeltas: content.kpiDeltas ?? {
+      burnout: department.trend === 'up' ? '+12%' : department.trend === 'down' ? '-6%' : '0%',
+      morale: department.trend === 'up' ? '-0.2' : '+0.1',
+      participation: content.participationDelta ?? '+3%',
+      stress: department.trend === 'up' ? '+0.8' : department.trend === 'down' ? '-0.4' : '+0.1',
+      workload: department.trend === 'up' ? '+10' : '+2',
+    },
     managerImpact,
+    managerFeedback: content.managerFeedback ?? [
+      'Planning clarity needs attention',
+      `Manager impact score: ${managerImpact}/100`,
+      'Feedback cadence should be strengthened',
+    ],
     morale10,
     negativeEmotion,
-    period: 'October 1-30, 2026',
+    participationRate: content.participationRate ?? clamp(Math.round(72 + department.resourceIndex * 5), 60, 96),
+    period: formatPeriod(report, content),
     riskRows,
+    summary: content.summary ?? `AI analysis indicates that ${department.name} has a ${department.riskLevel.toLowerCase()} risk pattern connected to stress, workload, and resource availability.`,
     stress10,
+    trendCaption: content.trendCaption ?? 'Peaks correlate with concentrated deadline periods and resource bottlenecks.',
     trend,
+    warnings: content.warnings ?? [
+      { body: `Stress score is ${department.stressScore.toFixed(1)}/5 in the latest snapshot.`, risk: department.riskLevel, title: 'Elevated stress pattern' },
+      { body: `Resource index is ${department.resourceIndex.toFixed(1)}/5, indicating recovery buffer pressure.`, risk: department.resourceIndex < 2.8 ? 'High' : 'Moderate', title: 'Recovery buffer pressure' },
+      { body: `${warningRiskDepartment.name} reports the highest workload-related exposure among peer teams.`, risk: 'Moderate', title: 'Workload imbalance' },
+    ],
     workloadImbalance,
   };
 };
@@ -174,7 +235,6 @@ const Section = ({ children, title }: React.PropsWithChildren<{ title: string }>
 export function InsightReportDocument({ departments, onPrint, report }: InsightReportDocumentProps) {
   const model = React.useMemo(() => buildReportModel(report, departments), [departments, report]);
   const { department } = model;
-  const topRiskDepartment = departments.find((item) => item.riskLevel === 'Critical') ?? department;
 
   return (
     <article className="print-report-root mx-auto max-w-[1160px] bg-[#f4f6f9] p-4 text-slate-900 sm:p-6">
@@ -244,8 +304,7 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
               <MetricTile label="Morale Score" tone="text-emerald-500" value={`${model.morale10}/10`} />
             </div>
             <div className="mt-4 border-l-4 border-red-400 bg-red-50 px-4 py-3 text-xs leading-relaxed text-slate-700">
-              AI analysis indicates a recurring pattern of high tempo combined with limited recovery time,
-              increasing long-term burnout risk in this group.
+              {model.summary}
             </div>
           </Section>
 
@@ -263,27 +322,27 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
                   <tr>
                     <td className="px-4 py-3 font-semibold text-slate-700">Average Stress Score</td>
                     <td className="px-4 py-3 font-bold text-red-500">{model.stress10} / 10</td>
-                    <td className="px-4 py-3 font-semibold text-red-500">up +1.2</td>
+                    <td className="px-4 py-3 font-semibold text-red-500">{model.kpiDeltas.stress}</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 font-semibold text-slate-700">Burnout Risk</td>
                     <td className="px-4 py-3 font-bold text-red-500">{model.burnoutRisk}% ({department.riskLevel})</td>
-                    <td className="px-4 py-3 font-semibold text-red-500">up +22%</td>
+                    <td className="px-4 py-3 font-semibold text-red-500">{model.kpiDeltas.burnout}</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 font-semibold text-slate-700">Workload Index</td>
                     <td className="px-4 py-3 font-bold text-amber-500">{Math.round(model.workloadImbalance * 2.1)}</td>
-                    <td className="px-4 py-3 font-semibold text-amber-500">up +18</td>
+                    <td className="px-4 py-3 font-semibold text-amber-500">{model.kpiDeltas.workload}</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 font-semibold text-slate-700">Morale Score</td>
                     <td className="px-4 py-3 font-bold text-emerald-500">{model.morale10} / 10</td>
-                    <td className="px-4 py-3 text-slate-500">-0.1</td>
+                    <td className="px-4 py-3 text-slate-500">{model.kpiDeltas.morale}</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 font-semibold text-slate-700">Daily Mood Check-in Participation</td>
-                    <td className="px-4 py-3 font-bold text-slate-900">92%</td>
-                    <td className="px-4 py-3 font-semibold text-emerald-500">up +5%</td>
+                    <td className="px-4 py-3 font-bold text-slate-900">{model.participationRate}%</td>
+                    <td className="px-4 py-3 font-semibold text-emerald-500">{model.kpiDeltas.participation}</td>
                   </tr>
                 </tbody>
               </table>
@@ -307,7 +366,7 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
                   </ResponsiveContainer>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                  Peaks correlate with concentrated deadline periods and resource bottlenecks.
+                  {model.trendCaption}
                 </p>
               </div>
               <div>
@@ -342,7 +401,7 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
                 </div>
                 <div className="mt-4 text-center text-xs">
                   <p className="font-semibold text-slate-600">Main Emotional Themes:</p>
-                  <p className="mt-2 font-black text-red-500">Fatigue - Time pressure - Loss of control</p>
+                  <p className="mt-2 font-black text-red-500">{model.emotionalThemes.join(' - ')}</p>
                 </div>
               </div>
             </div>
@@ -353,25 +412,19 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
               <div>
                 <h4 className="font-black text-blue-700">Short-Term (0-2 weeks)</h4>
                 <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-relaxed text-slate-600">
-                  <li>Manager 1:1s with high-risk individuals.</li>
-                  <li>Immediate project reprioritization meeting.</li>
-                  <li>Mandatory no-meeting block for deep work.</li>
+                  {model.interventionPlan.shortTerm.map((item: string) => <li key={item}>{item}</li>)}
                 </ul>
               </div>
               <div>
                 <h4 className="font-black text-blue-700">Medium-Term (2-8 weeks)</h4>
                 <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-relaxed text-slate-600">
-                  <li>Team workshop on workload management.</li>
-                  <li>Review and clarify roles and responsibilities.</li>
-                  <li>Implement weekly feedback check-ins.</li>
+                  {model.interventionPlan.mediumTerm.map((item: string) => <li key={item}>{item}</li>)}
                 </ul>
               </div>
               <div>
                 <h4 className="font-black text-blue-700">Long-Term Strategic</h4>
                 <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-relaxed text-slate-600">
-                  <li>Review campaign and process planning.</li>
-                  <li>Resource allocation review for Q1 2026.</li>
-                  <li>Leadership coaching for the manager.</li>
+                  {model.interventionPlan.longTerm.map((item: string) => <li key={item}>{item}</li>)}
                 </ul>
               </div>
             </div>
@@ -381,11 +434,7 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
         <aside className="space-y-5">
           <Section title="Critical Early Warning Signals">
             <div className="space-y-3">
-              {[
-                ['High stress for 3 consecutive weeks', 'Multiple employees show sustained high-stress levels, a key predictor of imminent burnout.', 'Critical'],
-                ['Sleep disturbance pattern', 'Increased late-night activity and negative sentiment in morning check-ins detected.', 'High'],
-                ['Workload imbalance', `${topRiskDepartment.name} reports higher workload than peer teams.`, 'Moderate'],
-              ].map(([title, body, risk]) => (
+              {model.warnings.map(({ title, body, risk }: { title: string; body: string; risk: RiskLevel }) => (
                 <div className={`rounded-md border-l-4 p-3 ${riskAccentClass[risk as RiskLevel]}`} key={title}>
                   <div className="flex gap-3">
                     <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${risk === 'Critical' ? 'bg-red-500' : risk === 'High' ? 'bg-orange-400' : 'bg-amber-400'}`} />
@@ -437,22 +486,20 @@ export function InsightReportDocument({ departments, onPrint, report }: InsightR
               <div className="h-full rounded-full bg-amber-400" style={{ width: `${model.managerImpact}%` }} />
             </div>
             <p className="mt-3 text-xs leading-relaxed text-slate-500">
-              Deficiencies noted in feedback frequency, planning clarity, and role prioritization.
+              {model.managerFeedback[0]}
             </p>
             <div className="mt-5 rounded-md bg-slate-50 p-4 text-center">
               <p className="text-xs font-black text-slate-700">Anonymous Manager Feedback</p>
-              <p className="mt-4 text-lg font-black text-red-500">Lack of planning</p>
-              <p className="mt-2 text-sm font-bold text-slate-800">Cannot keep up</p>
-              <p className="mt-2 text-xs font-semibold text-slate-500">Communication breakdown</p>
+              <p className="mt-4 text-lg font-black text-red-500">{model.managerFeedback[1]}</p>
+              <p className="mt-2 text-sm font-bold text-slate-800">{model.managerFeedback[2]}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">{model.managerFeedback[3] ?? model.summary}</p>
             </div>
           </Section>
 
           <div className="rounded-lg border-l-4 border-blue-700 bg-blue-50 p-5">
             <h3 className="text-sm font-black uppercase text-blue-700">General Assessment</h3>
             <p className="mt-3 text-xs leading-relaxed text-slate-700">
-              The department is currently in a high-risk state driven by excessive workload and planning deficiencies.
-              The proposed intervention plan is expected to reduce overall burnout risk by 30-40% within 8 weeks if
-              implemented effectively.
+              {model.generalAssessment}
             </p>
           </div>
         </aside>

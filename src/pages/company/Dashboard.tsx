@@ -51,12 +51,23 @@ export default function Dashboard() {
     [interventions, ahpWeights]
   );
   const criticalDepts = departments.filter(d => d.riskLevel === 'Critical').length;
+  const averageBurnout = departments.length
+    ? departments.reduce((sum, department) => sum + department.burnoutScore, 0) / departments.length
+    : 0;
+  const averageFairness = departments.length
+    ? departments.reduce((sum, department) => sum + department.fairness, 0) / departments.length
+    : 0;
+  const overallWellbeingScore = Math.round(
+    (
+      (orgRadarData.reduce((sum, metric) => sum + Number(metric.A ?? 0), 0) / Math.max(orgRadarData.length, 1)) / 5
+    ) * 100,
+  );
 
   const handleGenerateOrgReport = async () => {
     setIsGeneratingOrgReport(true);
 
     try {
-      await addReport({
+      const savedReport = await addReport({
         id: `ORG-${Date.now()}`,
         title: `Organization-Wide Health Summary`,
         type: 'Executive Summary',
@@ -66,7 +77,7 @@ export default function Dashboard() {
         status: 'Published',
         category: 'Organization'
       });
-      navigate('/company/reports');
+      navigate('/company/reports', { state: { openReportId: savedReport.id } });
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Unable to generate organization report.');
     } finally {
@@ -119,13 +130,13 @@ export default function Dashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Overall Wellbeing Score</p>
-                <h3 className="text-3xl font-bold mt-2">68/100</h3>
+                <h3 className="text-3xl font-bold mt-2">{overallWellbeingScore}/100</h3>
               </div>
               <div className="p-2 bg-destructive/10 rounded-lg">
                 <ArrowDownRight className="w-5 h-5 text-destructive" />
               </div>
             </div>
-            <p className="text-sm text-muted-foreground mt-4">-4 pts from last quarter</p>
+            <p className="text-sm text-muted-foreground mt-4">Calculated from latest organization radar</p>
           </CardContent>
         </Card>
         <Card>
@@ -133,7 +144,7 @@ export default function Dashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Average Burnout Score</p>
-                <h3 className="text-3xl font-bold mt-2">3.2<span className="text-lg text-muted-foreground">/5</span></h3>
+                <h3 className="text-3xl font-bold mt-2">{averageBurnout.toFixed(1)}<span className="text-lg text-muted-foreground">/5</span></h3>
               </div>
               <div className="p-2 bg-destructive/10 rounded-lg">
                 <ArrowUpRight className="w-5 h-5 text-destructive" />
@@ -147,7 +158,7 @@ export default function Dashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Fairness Index</p>
-                <h3 className="text-3xl font-bold mt-2">2.8<span className="text-lg text-muted-foreground">/5</span></h3>
+                <h3 className="text-3xl font-bold mt-2">{averageFairness.toFixed(1)}<span className="text-lg text-muted-foreground">/5</span></h3>
               </div>
               <div className="p-2 bg-destructive/10 rounded-lg">
                 <AlertTriangle className="w-5 h-5 text-destructive" />
@@ -217,7 +228,7 @@ export default function Dashboard() {
                   <Badge variant="outline" className="text-xs bg-background">{inv.closenessCoefficient}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Addresses high workload demands. High impact outweighs cost under current criteria.
+                  {inv.description}
                 </p>
               </div>
             ))}

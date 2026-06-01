@@ -7,12 +7,13 @@ import {
   createCompany,
   getCompanies,
   getCompanyRequests,
+  getCompanyRiskSummary,
   getInvoices,
   updateCompany,
 } from '../../lib/api';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { fallbackCompanies, fallbackCompanyRequests, fallbackInvoices } from '../../data/fallbackData';
-import type { Company, RiskLevel } from '../../types/domain';
+import type { Company, CompanyRiskSummary, RiskLevel } from '../../types/domain';
 
 const SECTORS = ['Technology', 'FMCG', 'Finance', 'Retail', 'Education', 'Healthcare', 'Manufacturing', 'Logistics', 'Other'];
 const SUBSCRIPTION_PLANS = ['Starter', 'Professional', 'Enterprise'];
@@ -28,6 +29,8 @@ export default function Companies() {
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'invite' | 'risk'>('general');
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [riskSummary, setRiskSummary] = useState<CompanyRiskSummary | null>(null);
+  const [isRiskSummaryLoading, setIsRiskSummaryLoading] = useState(false);
 
   const [formData, setFormData] = useState<CompanyForm>({
     name: '', sector: 'Technology', employees: 0, activeEmployees: 0, website: '',
@@ -43,6 +46,7 @@ export default function Companies() {
   const handleOpenCreate = () => {
     setModalMode('create');
     setActiveTab('general');
+    setRiskSummary(null);
     setFormData({ 
       name: '', sector: 'Technology', employees: 0, activeEmployees: 0, website: '',
       status: 'Active', risk: 'Unknown', contactName: '', contactEmail: '', contactPhone: '',
@@ -56,6 +60,11 @@ export default function Companies() {
     setModalMode('edit');
     setActiveTab('general');
     setEditingCompany(company);
+    setRiskSummary(null);
+    setIsRiskSummaryLoading(true);
+    void getCompanyRiskSummary(company.id)
+      .then(setRiskSummary)
+      .finally(() => setIsRiskSummaryLoading(false));
     const { id, ...companyForm } = company;
     setFormData(companyForm);
     setIsModalOpen(true);
@@ -83,6 +92,13 @@ export default function Companies() {
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
+
+  const riskBadgeVariant = (risk: RiskLevel) => (
+    risk === 'Critical' ? 'destructive' :
+    risk === 'High' ? 'warning' :
+    risk === 'Moderate' ? 'default' :
+    risk === 'Low' ? 'success' : 'outline'
+  );
 
   return (
     <div className="space-y-6">
@@ -442,26 +458,32 @@ export default function Companies() {
                       <AlertTriangle className="w-5 h-5 text-orange-500 mr-2 shrink-0 mt-0.5" />
                       <div>
                         <h4 className="text-sm font-bold text-orange-900">Risk Profile: {formData.risk}</h4>
-                        <p className="text-sm text-orange-800 mt-1">Based on recent psychometric surveys and platform activity.</p>
+                        <p className="text-sm text-orange-800 mt-1">
+                          {isRiskSummaryLoading ? 'Loading tenant risk signals...' : riskSummary?.summary ?? 'No risk signal rows are available for this tenant yet.'}
+                        </p>
                       </div>
                     </div>
                   </div>
                   
                   <div className="space-y-4">
-                    <div className="flex justify-between items-center p-3 border rounded-lg">
-                      <span className="text-sm font-medium">Burnout Risk (MBI)</span>
-                      <Badge variant={formData.risk === 'Critical' ? 'destructive' : 'warning'}>Elevated</Badge>
-                    </div>
-                    <div className="flex justify-between items-center p-3 border rounded-lg">
-                      <span className="text-sm font-medium">Perceived Stress (PSS)</span>
-                      <Badge variant={formData.risk === 'Moderate' ? 'default' : 'warning'}>Moderate</Badge>
-                    </div>
-                    <div className="flex justify-between items-center p-3 border rounded-lg">
-                      <span className="text-sm font-medium">Engagement/Resources (JD-R)</span>
-                      <Badge variant="outline">Stable</Badge>
-                    </div>
+                    {(riskSummary?.metrics ?? []).map((metric) => (
+                      <div key={metric.label} className="flex justify-between items-center p-3 border rounded-lg">
+                        <span className="text-sm font-medium">{metric.label}</span>
+                        <Badge variant={riskBadgeVariant(metric.tone)}>{metric.value}</Badge>
+                      </div>
+                    ))}
                   </div>
-                  <Button variant="outline" className="w-full" onClick={() => alert('Detailed analytical report generation under construction.')}>
+                  {(riskSummary?.recommendations.length ?? 0) > 0 && (
+                    <div className="rounded-lg border border-border bg-secondary/20 p-4">
+                      <h4 className="text-sm font-semibold mb-2">Recommended Next Steps</h4>
+                      <ul className="list-disc pl-5 space-y-1">
+                        {riskSummary?.recommendations.map((recommendation) => (
+                          <li key={recommendation} className="text-sm text-muted-foreground">{recommendation}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <Button variant="outline" className="w-full" onClick={() => window.print()}>
                     Download Full Risk Analytics PDF
                   </Button>
                 </div>

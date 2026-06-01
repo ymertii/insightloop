@@ -7,8 +7,8 @@ import { Progress } from '../../components/ui/Progress';
 import { ArrowLeft, Download, Share2, BrainCircuit, Activity, ChevronDown, ChevronUp, CheckCircle2, Users, Search, Edit2, Trash2, FileText, Loader2, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend } from 'recharts';
 import { useStore } from '../../store/useStore';
-import { createEmployee, deleteEmployee, getDepartmentEmployees, getDepartmentMetricTimeseries, getDepartmentRadar, getDepartments, updateEmployee } from '../../lib/api';
-import type { Department, Employee, RadarMetric, TrendPoint } from '../../types/domain';
+import { createEmployee, deleteEmployee, getDepartmentEmployees, getDepartmentMetricTimeseries, getDepartmentRadar, getDepartmentRecommendations, getDepartments, updateEmployee } from '../../lib/api';
+import type { Department, DepartmentRecommendation, Employee, RadarMetric, TrendPoint } from '../../types/domain';
 
 export default function DepartmentDetail() {
   const { id } = useParams();
@@ -19,6 +19,7 @@ export default function DepartmentDetail() {
   const [activeTab, setActiveTab] = useState<'insights' | 'employees'>('insights');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [recommendations, setRecommendations] = useState<DepartmentRecommendation[]>([]);
   const [fullTimeSeriesData, setFullTimeSeriesData] = useState<TrendPoint[]>([]);
   const [radarData, setRadarData] = useState<RadarMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,19 +38,21 @@ export default function DepartmentDetail() {
 
     try {
       const loadedDepartments = await getDepartments();
-      const selectedDepartment = loadedDepartments.find(d => d.id === id) || loadedDepartments.find(d => d.name === 'DevOps');
-      const [loadedEmployees, loadedTimeSeries, loadedRadar] = selectedDepartment
+      const selectedDepartment = loadedDepartments.find(d => d.id === id);
+      const [loadedEmployees, loadedTimeSeries, loadedRadar, loadedRecommendations] = selectedDepartment
         ? await Promise.all([
             getDepartmentEmployees(selectedDepartment.id),
             getDepartmentMetricTimeseries(selectedDepartment),
             getDepartmentRadar(selectedDepartment),
+            getDepartmentRecommendations(selectedDepartment),
           ])
-        : [[], [], []];
+        : [[], [], [], []];
 
       setDepartments(loadedDepartments);
       setEmployees(loadedEmployees);
       setFullTimeSeriesData(loadedTimeSeries);
       setRadarData(loadedRadar);
+      setRecommendations(loadedRecommendations);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Unable to load department details.');
     } finally {
@@ -61,7 +64,7 @@ export default function DepartmentDetail() {
     void loadDepartmentData();
   }, [loadDepartmentData]);
 
-  const dept = departments.find(d => d.id === id) || departments.find(d => d.name === 'DevOps');
+  const dept = departments.find(d => d.id === id);
   const addReport = useStore((state) => state.addReport);
 
   const handleGenerateReport = async () => {
@@ -204,145 +207,33 @@ export default function DepartmentDetail() {
 
   if (!dept) return <div>Department not found</div>;
 
-  // Mock department-specific recommendations based on the prompt's logic
-  const getRecommendations = (deptName: string) => {
-    let baseRecs = [];
-    if (deptName === 'DevOps') {
-      baseRecs = [
-        {
-          id: '1',
-          title: 'Workload Redesign and Redistribution',
-          rationale: 'Recommended because this department shows high emotional exhaustion, strong workload pressure, and weak recovery capacity.',
-          impact: 'High',
-          effort: 'Medium',
-          cost: '$$$',
-          owner: 'Department Manager + HRBP',
-          timeline: '4–6 weeks',
-          reviewDate: '30 days after launch'
-        },
-        {
-          id: '2',
-          title: 'Recovery Boundary Policies',
-          rationale: 'Addresses the inability to disconnect after hours, which is driving the high stress score.',
-          impact: 'Medium',
-          effort: 'Low',
-          cost: '$',
-          owner: 'Department Manager',
-          timeline: '2 weeks',
-          reviewDate: '14 days after launch'
-        },
-        {
-          id: '3',
-          title: 'Process Redesign (CI/CD Pipeline)',
-          rationale: 'Reduces manual toil and cognitive load, directly targeting the root cause of workload strain.',
-          impact: 'High',
-          effort: 'High',
-          cost: '$$$$',
-          owner: 'VP of Engineering',
-          timeline: '3 months',
-          reviewDate: '60 days after launch'
-        }
-      ];
-    } else if (deptName === 'Business Development') {
-      baseRecs = [
-        {
-          id: '1',
-          title: 'Recognition Program Redesign',
-          rationale: 'Directly addresses the critically low fairness perception and reward deficit in this department.',
-          impact: 'High',
-          effort: 'Medium',
-          cost: '$$',
-          owner: 'HRBP + Sales Leadership',
-          timeline: '4 weeks',
-          reviewDate: '30 days after launch'
-        },
-        {
-          id: '2',
-          title: 'Transparent Commission Communication',
-          rationale: 'Improves role clarity and fairness perception regarding compensation structures.',
-          impact: 'Medium',
-          effort: 'Low',
-          cost: '$',
-          owner: 'Sales Ops',
-          timeline: '2 weeks',
-          reviewDate: '14 days after launch'
-        }
-      ];
-    }
-
-    const defaultRecs = [
-      {
-        id: 'default-1',
-        title: 'Managerial Coaching and Leadership Training',
-        rationale: 'Equipping leaders with skills to support team wellbeing and recognize burnout.',
-        impact: 'High',
-        effort: 'Medium',
-        cost: '$$',
-        owner: 'HR L&D',
-        timeline: '6 weeks',
-        reviewDate: '30 days after launch'
-      },
-      {
-        id: 'default-2',
-        title: 'Flexible Work Policies',
-        rationale: 'Allowing employees autonomy over when and where they work reduces stress.',
-        impact: 'High',
-        effort: 'Low',
-        cost: '$',
-        owner: 'HR + Exec Team',
-        timeline: '3 weeks',
-        reviewDate: '30 days after launch'
-      },
-      {
-        id: 'default-3',
-        title: 'Peer Support Networks',
-        rationale: 'Creating formal and informal networks for peer-to-peer support.',
-        impact: 'Medium',
-        effort: 'Low',
-        cost: '$',
-        owner: 'Department Heads',
-        timeline: '4 weeks',
-        reviewDate: '60 days after launch'
-      },
-      {
-        id: 'default-4',
-        title: 'Workload Restructuring',
-        rationale: 'Changing team compositions and clarifying role boundaries.',
-        impact: 'High',
-        effort: 'High',
-        cost: '$$$',
-        owner: 'Operations',
-        timeline: '2 months',
-        reviewDate: '90 days after launch'
-      },
-      {
-        id: 'default-5',
-        title: 'Role Clarity Initiative',
-        rationale: 'Updating and clarifying expectations for all roles to reduce confusion and anxiety.',
-        impact: 'Medium',
-        effort: 'Medium',
-        cost: '$$',
-        owner: 'HR + Managers',
-        timeline: '6 weeks',
-        reviewDate: '30 days after launch'
-      }
-    ];
-
-    // Combine base with defaults to ensure we always have 5
-    const combined = [...baseRecs];
-    let i = 0;
-    while (combined.length < 5 && i < defaultRecs.length) {
-      if (!combined.some(r => r.title === defaultRecs[i].title)) {
-        combined.push({ ...defaultRecs[i], id: (combined.length + 1).toString() });
-      }
-      i++;
-    }
-    return combined;
-  };
-
-  const recommendations = getRecommendations(dept.name);
-
   const timeSeriesData = timeRange === '3M' ? fullTimeSeriesData.slice(-3) : timeRange === '6M' ? fullTimeSeriesData.slice(-6) : fullTimeSeriesData;
+  const latestSnapshot = fullTimeSeriesData.slice(-1)[0];
+  const previousSnapshot = fullTimeSeriesData.slice(-2)[0] ?? latestSnapshot;
+  const lastSurveyLabel = latestSnapshot?.name ?? latestSnapshot?.month ?? 'Latest snapshot';
+  const burnoutDelta = Number(dept.burnoutScore - Number(previousSnapshot?.burnout ?? dept.burnoutScore));
+  const weakestResource = dept.fairness <= dept.resourceIndex ? 'fairness' : 'resource support';
+  const workloadPressure = dept.stressScore >= 3.5 ? 'sustained workload pressure' : 'moderate workload pressure';
+  const recoveryCapacity = dept.resourceIndex < 2.8 ? 'limited recovery capacity' : 'resource availability that needs monitoring';
+  const summaryText = `${dept.name} is currently classified as ${dept.riskLevel.toLowerCase()} risk, driven by ${workloadPressure} and ${weakestResource} constraints. The latest snapshot shows burnout at ${dept.burnoutScore.toFixed(1)}/5 and resource health at ${dept.resourceIndex.toFixed(1)}/5.`;
+  const diagnosticNarrative = `${dept.name} shows a ${dept.riskLevel.toLowerCase()} organizational health pattern. Stress is at ${dept.stressScore.toFixed(1)}/5 with ${recoveryCapacity}, while the weakest resource signal is ${weakestResource}. The strongest recommended action is ${recommendations[0]?.title ?? 'a targeted workload and resource review'}.`;
+  const riskDrivers = [
+    {
+      title: 'Workload Pressure',
+      detail: `${dept.stressScore.toFixed(1)}/5 stress score in the latest backend snapshot.`,
+      tone: dept.stressScore >= 3.5 ? 'text-destructive' : 'text-amber-500',
+    },
+    {
+      title: 'Recovery Capacity',
+      detail: `${dept.resourceIndex.toFixed(1)}/5 resource index; lower values indicate weaker recovery buffers.`,
+      tone: dept.resourceIndex < 2.8 ? 'text-destructive' : 'text-amber-500',
+    },
+    {
+      title: 'Fairness Signal',
+      detail: `${dept.fairness.toFixed(1)}/5 fairness score across the department.`,
+      tone: dept.fairness < 2.8 ? 'text-destructive' : 'text-amber-500',
+    },
+  ];
 
   const handleApproveClick = (action: any) => {
     setSelectedAction(action);
@@ -365,7 +256,7 @@ export default function DepartmentDetail() {
               </Badge>
             </div>
             <p className="text-muted-foreground text-sm mt-1">
-              Last Survey: Q1 2026 • {dept.employeeCount} Employees
+              Last Survey: {lastSurveyLabel} • {dept.employeeCount} Employees
             </p>
           </div>
         </div>
@@ -375,7 +266,11 @@ export default function DepartmentDetail() {
           <Button variant="outline" size="sm" onClick={handleGenerateReport} disabled={isGeneratingReport}>
             {isGeneratingReport ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</> : <><FileText className="w-4 h-4 mr-2" /> Generate Report</>}
           </Button>
-          {activeTab === 'insights' && <Button onClick={() => handleApproveClick(recommendations[0])}>Approve Recommended Plan</Button>}
+          {activeTab === 'insights' && (
+            <Button onClick={() => recommendations[0] && handleApproveClick(recommendations[0])} disabled={!recommendations[0]}>
+              Approve Recommended Plan
+            </Button>
+          )}
         </div>
       </div>
 
@@ -405,7 +300,7 @@ export default function DepartmentDetail() {
             </CardHeader>
             <CardContent className="space-y-5">
               <p className="text-sm text-muted-foreground">
-                This department is currently operating at a critical risk level, primarily driven by sustained workload pressure and insufficient recovery time, leading to elevated emotional exhaustion.
+                {summaryText}
               </p>
               
               <div className="space-y-4 pt-2">
@@ -414,7 +309,9 @@ export default function DepartmentDetail() {
                     <span className="text-muted-foreground">Burnout Score</span>
                     <div className="flex items-center space-x-2">
                       <span className="font-bold">{dept.burnoutScore}/5.0</span>
-                      <span className="text-xs text-destructive">(+0.4 vs last cycle)</span>
+                      <span className={`text-xs ${burnoutDelta > 0 ? 'text-destructive' : 'text-emerald-500'}`}>
+                        ({burnoutDelta >= 0 ? '+' : ''}{burnoutDelta.toFixed(1)} vs last cycle)
+                      </span>
                     </div>
                   </div>
                   <Progress value={(dept.burnoutScore / 5) * 100} indicatorColor={dept.burnoutScore > 3.5 ? 'bg-destructive' : 'bg-amber-500'} />
@@ -480,27 +377,15 @@ export default function DepartmentDetail() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-4">
-                <li className="flex items-start space-x-3">
-                  <Activity className="w-5 h-5 text-destructive mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground">High Workload Pressure</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">Sustained demand exceeding capacity for 3+ months.</p>
-                  </div>
-                </li>
-                <li className="flex items-start space-x-3">
-                  <Activity className="w-5 h-5 text-destructive mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground">Low Recovery Capacity</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">Inability to disconnect after hours or take meaningful PTO.</p>
-                  </div>
-                </li>
-                <li className="flex items-start space-x-3">
-                  <Activity className="w-5 h-5 text-amber-500 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground">Role Ambiguity</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">Unclear prioritization leading to conflicting tasks.</p>
-                  </div>
-                </li>
+                {riskDrivers.map((driver) => (
+                  <li key={driver.title} className="flex items-start space-x-3">
+                    <Activity className={`w-5 h-5 ${driver.tone} mt-0.5`} />
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">{driver.title}</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">{driver.detail}</p>
+                    </div>
+                  </li>
+                ))}
               </ul>
             </CardContent>
           </Card>
@@ -515,7 +400,7 @@ export default function DepartmentDetail() {
                 <h3 className="text-lg font-semibold text-foreground">AI Diagnostic Narrative</h3>
               </div>
               <p className="text-sm text-foreground leading-relaxed">
-                Critical workload-related strain detected. The strongest burnout signal in this department is elevated emotional exhaustion combined with low recovery capacity. While community values remain relatively stable, the high workload demand is not matched by sufficient control over schedules or processes. This resource deficit is driving the critical risk classification. Interventions must focus on structural workload reduction rather than individual resilience training.
+                {diagnosticNarrative}
               </p>
             </CardContent>
           </Card>

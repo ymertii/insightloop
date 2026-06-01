@@ -24,23 +24,30 @@ import type {
   BenchmarkMetric,
   Company,
   CompanyRequest,
+  CompanyRiskSummary,
   CompletedTest,
   Department,
+  DepartmentRecommendation,
+  DepartmentResponseRate,
   Employee,
+  EmployeeAssessmentAssignment,
   EmployeeDashboardData,
   Intervention,
   InventoryTemplate,
   Invoice,
   LibraryResource,
   Persona,
+  PlatformActivity,
   PromptTemplate,
   RadarMetric,
   Report,
+  RiskLevel,
   TrendPoint,
 } from '../types/domain';
 import { supabase } from './supabase';
 
 export const DEFAULT_COMPANY_ID = '10000000-0000-0000-0000-000000000001';
+export const DEMO_EMPLOYEE_ID = '30000000-0000-0000-0000-000000000105';
 
 type UnknownRecord = Record<string, any>;
 
@@ -57,6 +64,51 @@ const toTitleCase = (value?: string | null) =>
 const toEnumValue = (value?: string | null) => (value ?? '').trim().toLowerCase().replace(/\s+/g, '_');
 
 const categoryToEnum = (value?: string | null) => toEnumValue(value);
+
+const formatSeconds = (seconds?: number | null) => {
+  const totalSeconds = Number(seconds ?? 0);
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return undefined;
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = Math.round(totalSeconds % 60);
+  return `${minutes}m ${remainder.toString().padStart(2, '0')}s`;
+};
+
+const formatDate = (value?: string | null) => {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
+};
+
+const formatDueLabel = (value?: string | null) => {
+  if (!value) return 'No due date';
+
+  const due = new Date(value);
+  const diffDays = Math.ceil((due.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return 'Past due';
+  if (diffDays === 0) return 'Due today';
+  if (diffDays === 1) return 'Due tomorrow';
+  return `Due in ${diffDays} days`;
+};
+
+const formatRelativeTime = (value?: string | null) => {
+  if (!value) return '';
+
+  const diffMs = Date.now() - new Date(value).getTime();
+  const minutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hours ago`;
+
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} days ago`;
+
+  return formatDate(value);
+};
+
+const normalizeNested = <T = UnknownRecord>(value: T | T[] | null | undefined): T | undefined =>
+  Array.isArray(value) ? value[0] : value ?? undefined;
 
 function warnFallback(table: string, error: unknown) {
   console.warn(`[backend] Falling back to seed data for ${table}.`, error);
@@ -225,6 +277,10 @@ const asReport = (row: UnknownRecord): Report => ({
   status: toTitleCase(row.status),
   content: row.content,
   category: toTitleCase(row.category) as Report['category'],
+  periodStart: row.period_start,
+  periodEnd: row.period_end,
+  periodLabel: row.period_label,
+  sections: row.sections ?? [],
 });
 
 const reportToRow = (report: Partial<Report>) => ({
@@ -236,6 +292,10 @@ const reportToRow = (report: Partial<Report>) => ({
   status: toEnumValue(report.status),
   content: report.content,
   category: toEnumValue(report.category),
+  period_start: report.periodStart,
+  period_end: report.periodEnd,
+  period_label: report.periodLabel,
+  sections: report.sections,
   company_id: DEFAULT_COMPANY_ID,
 });
 
@@ -313,6 +373,7 @@ const asInvoice = (row: UnknownRecord): Invoice => ({
 
 const asActionPlan = (row: UnknownRecord): ActionPlan => ({
   id: String(row.id),
+  departmentId: row.department_id ?? row.departmentId ?? null,
   title: row.title,
   department: row.department ?? row.departments?.name ?? 'All Departments',
   intervention: row.intervention ?? row.interventions?.title ?? 'Intervention',
@@ -322,6 +383,7 @@ const asActionPlan = (row: UnknownRecord): ActionPlan => ({
   kpi: row.kpi,
   lastUpdated: row.last_updated_at ?? row.last_updated ?? row.lastUpdated ?? '',
   details: row.details,
+  progressPercent: row.progress_percent ?? row.progressPercent,
 });
 
 const actionPlanToRow = (plan: Partial<ActionPlan>) => ({
@@ -332,6 +394,7 @@ const actionPlanToRow = (plan: Partial<ActionPlan>) => ({
   kpi: plan.kpi,
   last_updated_at: new Date().toISOString(),
   details: plan.details,
+  progress_percent: plan.progressPercent,
   company_id: DEFAULT_COMPANY_ID,
 });
 
@@ -365,7 +428,8 @@ const asBenchmark = (row: UnknownRecord): BenchmarkMetric => ({
 const asCompletedTest = (row: UnknownRecord): CompletedTest => ({
   id: String(row.id),
   name: row.name,
-  date: row.ends_at ? String(row.ends_at).slice(0, 12) : row.date,
+  date: row.ends_at ? formatDate(row.ends_at) : row.date,
+  target: row.departments?.name ? `${row.departments.name} Department` : row.target ?? (row.target_type === 'company' ? 'Company' : 'Selected group'),
   rate: row.response_rate ?? row.rate,
   responses: row.response_count ?? row.responses,
   finding: row.finding,
@@ -579,6 +643,75 @@ export async function getActionPlans() {
   return data.map(asActionPlan);
 }
 
+export async function getDepartmentRecommendations(department: Department): Promise<DepartmentRecommendation[]> {
+  const fallbackInterventionRows = calculateTopsis(fallbackInterventions, {
+    cost: 22,
+    speed: 12,
+    impact: 47,
+    readiness: 19,
+  }).slice(0, 5);
+
+  const fallbackRecommendations = fallbackInterventionRows.map((intervention, index) => ({
+    id: intervention.id,
+    title: intervention.title,
+    rationale: intervention.description,
+    impact: intervention.expectedImpact >= 0.75 ? 'High' : intervention.expectedImpact >= 0.55 ? 'Medium' : 'Low',
+    effort: intervention.readinessNeed >= 0.7 ? 'High' : intervention.readinessNeed >= 0.45 ? 'Medium' : 'Low',
+    cost: intervention.estimatedCost >= 0.65 ? '$$$' : intervention.estimatedCost >= 0.35 ? '$$' : '$',
+    owner: department.manager ? `${department.manager} + HRBP` : 'HRBP',
+    timeline: intervention.speed >= 0.7 ? '2-3 weeks' : intervention.speed >= 0.4 ? '4-6 weeks' : '2-3 months',
+    reviewDate: intervention.speed >= 0.7 ? '14 days after launch' : '30 days after launch',
+    closenessCoefficient: intervention.closenessCoefficient,
+  }));
+
+  if (!supabase) return fallbackRecommendations;
+
+  const departmentDbId = department.dbId ?? await resolveDepartmentDbId(department.id);
+  const { data, error } = await supabase
+    .from('intervention_rankings')
+    .select('rank, closeness_coefficient, rationale, interventions(*)')
+    .eq('company_id', DEFAULT_COMPANY_ID)
+    .eq('department_id', departmentDbId)
+    .order('rank', { ascending: true });
+
+  if (error || !data?.length) {
+    const interventions = await getInterventions();
+    return calculateTopsis(interventions, {
+      cost: 22,
+      speed: 12,
+      impact: 47,
+      readiness: 19,
+    }).slice(0, 5).map((intervention) => ({
+      id: intervention.id,
+      title: intervention.title,
+      rationale: intervention.description,
+      impact: intervention.expectedImpact >= 0.75 ? 'High' : intervention.expectedImpact >= 0.55 ? 'Medium' : 'Low',
+      effort: intervention.readinessNeed >= 0.7 ? 'High' : intervention.readinessNeed >= 0.45 ? 'Medium' : 'Low',
+      cost: intervention.estimatedCost >= 0.65 ? '$$$' : intervention.estimatedCost >= 0.35 ? '$$' : '$',
+      owner: department.manager ? `${department.manager} + HRBP` : 'HRBP',
+      timeline: intervention.speed >= 0.7 ? '2-3 weeks' : intervention.speed >= 0.4 ? '4-6 weeks' : '2-3 months',
+      reviewDate: intervention.speed >= 0.7 ? '14 days after launch' : '30 days after launch',
+      closenessCoefficient: intervention.closenessCoefficient,
+    }));
+  }
+
+  return data.map((row) => {
+    const intervention = asIntervention(normalizeNested(row.interventions) ?? {});
+    return {
+      id: intervention.id,
+      title: intervention.title,
+      rationale: row.rationale ?? intervention.description,
+      impact: intervention.expectedImpact >= 0.75 ? 'High' : intervention.expectedImpact >= 0.55 ? 'Medium' : 'Low',
+      effort: intervention.readinessNeed >= 0.7 ? 'High' : intervention.readinessNeed >= 0.45 ? 'Medium' : 'Low',
+      cost: intervention.estimatedCost >= 0.65 ? '$$$' : intervention.estimatedCost >= 0.35 ? '$$' : '$',
+      owner: department.manager ? `${department.manager} + HRBP` : 'HRBP',
+      timeline: intervention.speed >= 0.7 ? '2-3 weeks' : intervention.speed >= 0.4 ? '4-6 weeks' : '2-3 months',
+      reviewDate: intervention.speed >= 0.7 ? '14 days after launch' : '30 days after launch',
+      closenessCoefficient: row.closeness_coefficient ? Number(row.closeness_coefficient).toFixed(3) : undefined,
+    };
+  });
+}
+
 export async function updateActionPlan(id: string, plan: Partial<ActionPlan>) {
   const fallback: ActionPlan = { id, ...fallbackActionPlans[0], ...plan };
   return updateRow('action_plans', id, actionPlanToRow(plan), fallback, asActionPlan);
@@ -655,15 +788,26 @@ export async function getActiveInventories(): Promise<ActiveInventory[]> {
     name: row.name,
     target: row.target ?? (row.target_type === 'company' ? 'All Departments' : 'Selected group'),
     endsIn: row.ends_at ? `Ends ${String(row.ends_at).slice(0, 10)}` : row.ends_in ?? row.endsIn,
+    invitedCount: row.invited_count ?? row.invitedCount ?? 0,
+    responseCount: row.response_count ?? row.responseCount ?? 0,
+    reminderPendingCount: row.reminder_pending_count ?? Math.max(0, Number(row.invited_count ?? 0) - Number(row.response_count ?? 0)),
     responseRate: row.response_rate ?? row.responseRate ?? 0,
     status: toTitleCase(row.status),
+    averageTimeLabel: formatSeconds(row.avg_completion_seconds ?? row.metadata?.avg_completion_seconds),
+    abandonmentRate: row.invited_count
+      ? Number((((row.abandoned_count ?? row.metadata?.abandoned_count ?? 0) / row.invited_count) * 100).toFixed(1))
+      : row.metadata?.abandonment_rate,
+    earlyInsight: row.finding ?? row.insights?.[0],
   }));
 }
 
 export async function getCompletedTests() {
   if (!supabase) return fallbackCompletedTests;
 
-  const { data, error } = await supabase.from('assessment_runs').select('*').eq('status', 'completed');
+  const { data, error } = await supabase
+    .from('assessment_runs')
+    .select('*, departments:target_department_id(name)')
+    .eq('status', 'completed');
 
   if (error || !data) {
     warnFallback('assessment_runs', error);
@@ -671,6 +815,57 @@ export async function getCompletedTests() {
   }
 
   return data.map(asCompletedTest);
+}
+
+export async function getDepartmentResponseRates(assessmentRunId?: string): Promise<DepartmentResponseRate[]> {
+  const fallbackRun = fallbackActiveInventories[0];
+  const fallbackRates = fallbackDepartments.slice(0, 5).map((department) => ({
+    department: department.name,
+    rate: fallbackRun?.responseRate ?? 0,
+    responses: Math.round((department.employeeCount * (fallbackRun?.responseRate ?? 0)) / 100),
+  }));
+
+  if (!supabase) return fallbackRates;
+
+  let runId = assessmentRunId;
+  if (!runId) {
+    const { data: activeRun, error: activeRunError } = await supabase
+      .from('assessment_runs')
+      .select('id')
+      .eq('company_id', DEFAULT_COMPANY_ID)
+      .eq('status', 'active')
+      .order('ends_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeRunError || !activeRun?.id) {
+      warnFallback('assessment_runs', activeRunError);
+      return fallbackRates;
+    }
+
+    runId = String(activeRun.id);
+  }
+
+  const { data, error } = await supabase
+    .from('assessment_department_stats')
+    .select('response_count, response_rate, departments(name)')
+    .eq('company_id', DEFAULT_COMPANY_ID)
+    .eq('assessment_run_id', runId)
+    .order('response_rate', { ascending: false });
+
+  if (error || !data?.length) {
+    warnFallback('assessment_department_stats', error);
+    return fallbackRates;
+  }
+
+  return data.map((row) => {
+    const department = normalizeNested(row.departments);
+    return {
+      department: department?.name ?? 'Department',
+      rate: Number(row.response_rate ?? 0),
+      responses: Number(row.response_count ?? 0),
+    };
+  });
 }
 
 export async function getBenchmarks() {
@@ -803,6 +998,161 @@ export async function getDepartmentRadar(department: Department): Promise<RadarM
 
 export async function getEmployeeDashboard() {
   return selectPayload<EmployeeDashboardData>('employee_dashboard_snapshots', fallbackEmployeeDashboard);
+}
+
+const itemOptions = (item: UnknownRecord) => {
+  if (Array.isArray(item.options) && item.options.length) return item.options.map(String);
+
+  const min = Number(item.scale_min ?? 1);
+  const max = Number(item.scale_max ?? 5);
+  const minLabel = item.scale_min_label ? ` - ${item.scale_min_label}` : '';
+  const maxLabel = item.scale_max_label ? ` - ${item.scale_max_label}` : '';
+
+  return Array.from({ length: Math.max(0, max - min + 1) }, (_, index) => {
+    const value = min + index;
+    if (value === min) return `${value}${minLabel}`;
+    if (value === max) return `${value}${maxLabel}`;
+    return String(value);
+  });
+};
+
+export async function getActiveEmployeeAssignment(employeeId = DEMO_EMPLOYEE_ID): Promise<EmployeeAssessmentAssignment | null> {
+  const fallbackTemplate = fallbackInventoryTemplates[0];
+  const fallbackRun = fallbackActiveInventories[0];
+  const fallbackAssignment: EmployeeAssessmentAssignment | null = fallbackTemplate && fallbackRun ? {
+    id: fallbackRun.id,
+    employeeName: 'Jane Miller',
+    name: fallbackRun.name,
+    dueLabel: fallbackRun.endsIn,
+    progress: 10,
+    questions: fallbackTemplate.items.map((item) => ({
+      id: item.id,
+      question: item.question,
+      options: item.options?.length
+        ? item.options
+        : Array.from({ length: (item.scaleMax ?? 5) - (item.scaleMin ?? 1) + 1 }, (_, index) => String((item.scaleMin ?? 1) + index)),
+    })),
+  } : null;
+
+  if (!supabase) return fallbackAssignment;
+
+  const { data, error } = await supabase
+    .from('assessment_assignments')
+    .select(`
+      *,
+      company_members(full_name),
+      assessment_runs(
+        id,
+        name,
+        ends_at,
+        assessment_templates(
+          title,
+          assessment_items(*)
+        )
+      )
+    `)
+    .eq('company_id', DEFAULT_COMPANY_ID)
+    .eq('company_member_id', employeeId)
+    .in('status', ['assigned', 'in_progress'])
+    .order('due_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    warnFallback('assessment_assignments', error);
+    return fallbackAssignment;
+  }
+
+  const run = normalizeNested(data.assessment_runs);
+  const template = normalizeNested(run?.assessment_templates);
+  const items = (template?.assessment_items ?? [])
+    .sort((a: UnknownRecord, b: UnknownRecord) => (a.display_order ?? 0) - (b.display_order ?? 0))
+    .map((item: UnknownRecord) => ({
+      id: String(item.id),
+      question: item.question,
+      options: itemOptions(item),
+    }));
+
+  return {
+    id: String(data.id),
+    employeeName: normalizeNested(data.company_members)?.full_name,
+    name: run?.name ?? template?.title ?? 'Active Assessment',
+    dueLabel: formatDueLabel(data.due_at ?? run?.ends_at),
+    progress: Number(data.progress_percent ?? 0),
+    questions: items,
+  };
+}
+
+export async function getCompanyRiskSummary(companyId = DEFAULT_COMPANY_ID): Promise<CompanyRiskSummary | null> {
+  if (!supabase) {
+    const company = fallbackCompanies.find((item) => item.id === companyId) ?? fallbackCompanies[0];
+    return {
+      companyId: company.id,
+      generatedAt: company.nextBillingDate,
+      metrics: [
+        { label: 'Overall Risk', value: company.risk, tone: company.risk },
+        { label: 'Active Employees', value: company.activeEmployees.toLocaleString(), tone: company.risk },
+      ],
+      drivers: ['Fallback tenant risk signal'],
+      recommendations: ['Connect Supabase to load tenant risk signals.'],
+      summary: `${company.name} is currently marked as ${company.risk}.`,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('company_risk_signals')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('score', { ascending: false });
+
+  if (error || !data?.length) {
+    warnFallback('company_risk_signals', error);
+    return null;
+  }
+
+  const recommendations = Array.from(new Set(data.flatMap((signal) => signal.recommendations ?? [])));
+
+  return {
+    companyId,
+    generatedAt: data[0]?.updated_at ?? data[0]?.created_at ?? '',
+    metrics: data.map((signal) => ({
+      label: signal.title,
+      value: signal.score ? `${Number(signal.score).toFixed(1)}${signal.trend_label ? ` (${signal.trend_label})` : ''}` : toTitleCase(signal.severity),
+      tone: toTitleCase(signal.severity) as RiskLevel,
+    })),
+    drivers: data.map((signal) => signal.summary).filter(Boolean),
+    recommendations,
+    summary: data[0]?.summary ?? 'Tenant risk signals are available.',
+  };
+}
+
+export async function getPlatformActivity(): Promise<PlatformActivity[]> {
+  if (!supabase) {
+    return fallbackCompanies.slice(0, 4).map((company, index) => ({
+      id: company.id,
+      tenant: company.name,
+      action: ['Generated AI report', 'Launched inventory campaign', 'Created action plan', 'Updated tenant profile'][index] ?? 'Updated tenant profile',
+      time: company.nextBillingDate,
+    }));
+  }
+
+  const { data, error } = await supabase
+    .from('activity_events')
+    .select('*, companies(name)')
+    .order('occurred_at', { ascending: false })
+    .limit(8);
+
+  if (error || !data) {
+    warnFallback('activity_events', error);
+    return [];
+  }
+
+  return data.map((row) => ({
+    id: String(row.id),
+    tenant: normalizeNested(row.companies)?.name ?? 'Platform',
+    action: row.title,
+    time: formatRelativeTime(row.occurred_at),
+  }));
 }
 
 export async function getPromptTemplates() {

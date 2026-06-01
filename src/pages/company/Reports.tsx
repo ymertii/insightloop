@@ -13,11 +13,20 @@ const completedTestToInventoryReport = (test: CompletedTest): Report => ({
   id: `INV-${test.id}`,
   title: test.name,
   type: 'Inventory Report',
-  scope: test.name.toLowerCase().includes('sales') ? 'Sales Department' : 'Company',
+  scope: test.target ?? 'Company',
   date: test.date,
   author: 'System',
   status: test.status ?? 'Published',
   category: 'Inventory',
+  content: JSON.stringify({
+    metrics: {
+      responseRate: test.rate,
+      responses: test.responses,
+      ...test.metrics,
+    },
+    insights: test.insights ?? [],
+    summary: test.finding,
+  }),
 });
 
 const buildGeneratedReportContent = (reportFocus: string, departments: Department[]) => {
@@ -102,7 +111,9 @@ export default function Reports() {
       type = 'Department Diagnostic';
       category = 'Department';
     } else if (reportFocus.startsWith('test-')) {
-      title = 'Inventory Assessment Report';
+      const inventoryReport = completedInventoryReports.find((report) => report.id === reportFocus.replace('test-', ''));
+      title = inventoryReport?.title ?? 'Inventory Assessment Report';
+      scope = inventoryReport?.scope ?? 'Company';
       type = 'Inventory Report';
       category = 'Inventory';
     }
@@ -340,8 +351,9 @@ export default function Reports() {
                     ))}
                   </optgroup>
                   <optgroup label="Inventories">
-                    <option value="test-q1">Q1 Burnout Pulse</option>
-                    <option value="test-sales">Sales Dept Deep Dive</option>
+                    {completedInventoryReports.map((report) => (
+                      <option key={report.id} value={`test-${report.id}`}>{report.title}</option>
+                    ))}
                   </optgroup>
                 </select>
               </div>
