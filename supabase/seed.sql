@@ -86,74 +86,6 @@ on conflict (sector) do update set
   stress = excluded.stress,
   resources = excluded.resources;
 
-insert into public.employee_dashboard_snapshots (
-  id, company_id, company_member_id, payload
-) values (
-  'e2000000-0000-0000-0000-000000000001',
-  '10000000-0000-0000-0000-000000000001',
-  '30000000-0000-0000-0000-000000000105',
-  '{
-    "strengths":[
-      {"subject":"Resilience","A":85,"fullMark":100},
-      {"subject":"Peer Support","A":75,"fullMark":100},
-      {"subject":"Autonomy","A":65,"fullMark":100},
-      {"subject":"Emot. Control","A":80,"fullMark":100},
-      {"subject":"Adaptability","A":88,"fullMark":100},
-      {"subject":"Focus","A":90,"fullMark":100},
-      {"subject":"Boundaries","A":60,"fullMark":100},
-      {"subject":"Empathy","A":95,"fullMark":100},
-      {"subject":"Creativity","A":78,"fullMark":100}
-    ],
-    "miniTrend":[
-      {"month":"Jan","value":2.8},
-      {"month":"Feb","value":3.1},
-      {"month":"Mar","value":3.0},
-      {"month":"Apr","value":2.9},
-      {"month":"May","value":2.7}
-    ],
-    "recentTests":[
-      {"id":"recent-1","name":"Q1 Wellbeing Pulse","date":"Mar 15"},
-      {"id":"recent-2","name":"Annual Burnout Inventory","date":"Dec 05"}
-    ],
-    "personalTrend":{
-      "3M":[
-        {"month":"Feb","stress":3.1,"recovery":3.0,"engagement":3.5},
-        {"month":"Mar","stress":3.0,"recovery":3.2,"engagement":3.7},
-        {"month":"Apr","stress":2.9,"recovery":3.4,"engagement":3.9},
-        {"month":"May","stress":2.7,"recovery":3.7,"engagement":4.0}
-      ],
-      "6M":[
-        {"month":"Dec","stress":2.4,"recovery":3.8,"engagement":4.1},
-        {"month":"Jan","stress":2.8,"recovery":3.5,"engagement":3.8},
-        {"month":"Feb","stress":3.1,"recovery":3.0,"engagement":3.5},
-        {"month":"Mar","stress":3.0,"recovery":3.2,"engagement":3.7},
-        {"month":"Apr","stress":2.9,"recovery":3.4,"engagement":3.9},
-        {"month":"May","stress":2.7,"recovery":3.7,"engagement":4.0}
-      ],
-      "1Y":[
-        {"month":"Jun","stress":2.0,"recovery":4.5,"engagement":4.2},
-        {"month":"Jul","stress":2.2,"recovery":4.2,"engagement":4.1},
-        {"month":"Aug","stress":2.3,"recovery":4.1,"engagement":4.0},
-        {"month":"Sep","stress":2.5,"recovery":4.0,"engagement":3.9},
-        {"month":"Oct","stress":2.1,"recovery":4.2,"engagement":4.0},
-        {"month":"Nov","stress":2.2,"recovery":4.1,"engagement":4.2},
-        {"month":"Dec","stress":2.4,"recovery":3.8,"engagement":4.1},
-        {"month":"Jan","stress":2.8,"recovery":3.5,"engagement":3.8},
-        {"month":"Feb","stress":3.1,"recovery":3.0,"engagement":3.5},
-        {"month":"Mar","stress":3.0,"recovery":3.2,"engagement":3.7},
-        {"month":"Apr","stress":2.9,"recovery":3.4,"engagement":3.9},
-        {"month":"May","stress":2.7,"recovery":3.7,"engagement":4.0}
-      ]
-    },
-    "pastTests":[
-      {"id":"pt-1","name":"Q1 Wellbeing Pulse","date":"2026-03-15","score":"Balanced","status":"Completed","details":"Your wellbeing index is strong. Burnout risk is low. You showed good emotional regulation and high peer support.","chartData":[{"subject":"Emotional","A":80},{"subject":"Peer Support","A":85},{"subject":"Workload","A":60},{"subject":"Autonomy","A":75},{"subject":"Fairness","A":82}]},
-      {"id":"pt-2","name":"Annual Maslach Burnout Inventory","date":"2025-12-05","score":"Low Risk","status":"Completed","details":"Evaluated exhaustion, cynicism, and professional efficacy. Results indicate healthy engagement with work and minimal signs of exhaustion.","chartData":[{"subject":"Exhaustion","A":20},{"subject":"Cynicism","A":15},{"subject":"Efficacy","A":85},{"subject":"Engagement","A":90}]}
-    ]
-  }'::jsonb
-)
-on conflict (company_member_id) do update set
-  payload = excluded.payload;
-
 insert into public.company_requests (
   id, company_name, contact_name, email, request_type, submitted_at, status, requested_employee_count
 ) values
@@ -225,6 +157,74 @@ on conflict (id) do update set
   job_title = excluded.job_title,
   role = excluded.role,
   status = excluded.status;
+
+insert into public.employee_dashboard_snapshots (
+  id, company_id, company_member_id, payload
+) values (
+  'e2000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  '30000000-0000-0000-0000-000000000105',
+  '{
+    "strengths":[
+      {"subject":"Resilience","A":85,"fullMark":100},
+      {"subject":"Peer Support","A":75,"fullMark":100},
+      {"subject":"Autonomy","A":65,"fullMark":100},
+      {"subject":"Emot. Control","A":80,"fullMark":100},
+      {"subject":"Adaptability","A":88,"fullMark":100},
+      {"subject":"Focus","A":90,"fullMark":100},
+      {"subject":"Boundaries","A":60,"fullMark":100},
+      {"subject":"Empathy","A":95,"fullMark":100},
+      {"subject":"Creativity","A":78,"fullMark":100}
+    ],
+    "miniTrend":[
+      {"month":"Jan","value":2.8},
+      {"month":"Feb","value":3.1},
+      {"month":"Mar","value":3.0},
+      {"month":"Apr","value":2.9},
+      {"month":"May","value":2.7}
+    ],
+    "recentTests":[
+      {"id":"recent-1","name":"Q1 Wellbeing Pulse","date":"Mar 15"},
+      {"id":"recent-2","name":"Annual Burnout Inventory","date":"Dec 05"}
+    ],
+    "personalTrend":{
+      "3M":[
+        {"month":"Feb","stress":3.1,"recovery":3.0,"engagement":3.5},
+        {"month":"Mar","stress":3.0,"recovery":3.2,"engagement":3.7},
+        {"month":"Apr","stress":2.9,"recovery":3.4,"engagement":3.9},
+        {"month":"May","stress":2.7,"recovery":3.7,"engagement":4.0}
+      ],
+      "6M":[
+        {"month":"Dec","stress":2.4,"recovery":3.8,"engagement":4.1},
+        {"month":"Jan","stress":2.8,"recovery":3.5,"engagement":3.8},
+        {"month":"Feb","stress":3.1,"recovery":3.0,"engagement":3.5},
+        {"month":"Mar","stress":3.0,"recovery":3.2,"engagement":3.7},
+        {"month":"Apr","stress":2.9,"recovery":3.4,"engagement":3.9},
+        {"month":"May","stress":2.7,"recovery":3.7,"engagement":4.0}
+      ],
+      "1Y":[
+        {"month":"Jun","stress":2.0,"recovery":4.5,"engagement":4.2},
+        {"month":"Jul","stress":2.2,"recovery":4.2,"engagement":4.1},
+        {"month":"Aug","stress":2.3,"recovery":4.1,"engagement":4.0},
+        {"month":"Sep","stress":2.5,"recovery":4.0,"engagement":3.9},
+        {"month":"Oct","stress":2.1,"recovery":4.2,"engagement":4.0},
+        {"month":"Nov","stress":2.2,"recovery":4.1,"engagement":4.2},
+        {"month":"Dec","stress":2.4,"recovery":3.8,"engagement":4.1},
+        {"month":"Jan","stress":2.8,"recovery":3.5,"engagement":3.8},
+        {"month":"Feb","stress":3.1,"recovery":3.0,"engagement":3.5},
+        {"month":"Mar","stress":3.0,"recovery":3.2,"engagement":3.7},
+        {"month":"Apr","stress":2.9,"recovery":3.4,"engagement":3.9},
+        {"month":"May","stress":2.7,"recovery":3.7,"engagement":4.0}
+      ]
+    },
+    "pastTests":[
+      {"id":"pt-1","name":"Q1 Wellbeing Pulse","date":"2026-03-15","score":"Balanced","status":"Completed","details":"Your wellbeing index is strong. Burnout risk is low. You showed good emotional regulation and high peer support.","chartData":[{"subject":"Emotional","A":80},{"subject":"Peer Support","A":85},{"subject":"Workload","A":60},{"subject":"Autonomy","A":75},{"subject":"Fairness","A":82}]},
+      {"id":"pt-2","name":"Annual Maslach Burnout Inventory","date":"2025-12-05","score":"Low Risk","status":"Completed","details":"Evaluated exhaustion, cynicism, and professional efficacy. Results indicate healthy engagement with work and minimal signs of exhaustion.","chartData":[{"subject":"Exhaustion","A":20},{"subject":"Cynicism","A":15},{"subject":"Efficacy","A":85},{"subject":"Engagement","A":90}]}
+    ]
+  }'::jsonb
+)
+on conflict (company_member_id) do update set
+  payload = excluded.payload;
 
 update public.departments set manager_member_id = '30000000-0000-0000-0000-000000000001' where id = '20000000-0000-0000-0000-000000000001';
 update public.departments set manager_member_id = '30000000-0000-0000-0000-000000000002' where id = '20000000-0000-0000-0000-000000000002';
