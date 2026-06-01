@@ -1,18 +1,9 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, isSupabaseConfigured } from '../utils/supabase/client';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export { isSupabaseConfigured };
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
-  : null;
+export const supabase: SupabaseClient | null = isSupabaseConfigured ? createClient() : null;
 
 export function requireSupabase() {
   if (!supabase) {
